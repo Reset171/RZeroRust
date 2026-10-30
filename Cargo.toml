@@ -1,0 +1,16 @@
+[package]
+name = "rzero"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+authors = ["Reset171"]
+description = "Return by Death. Completely rewind the timeline and the world state to your last checkpoint upon death."
+
+[lib]
+name = "rzero"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"

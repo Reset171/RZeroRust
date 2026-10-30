@@ -1,0 +1,122 @@
+[mod]
+id = "rzero"
+version = "0.1.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "ba6344a59cb9e755b730dcf02285fc0d33b97d3c"
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game/levels.rs"
+name = "rzero"
+source = "runtime.rs"
+
+[[injection]]
+id = "native-mods"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+kind = "HEAD"
+helper = "hook_mods.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<NativeMod>", value = "&mut *mods" },
+]
+
+[[injection]]
+id = "native-settings"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings"
+kind = "HEAD"
+helper = "hook_settings.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "buttons", ty = "&mut Vec<String>", value = "&mut *buttons" },
+]
+
+[[injection]]
+id = "native-settings-click"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings_click"
+kind = "HEAD"
+helper = "hook_settings_click.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "button", ty = "usize", value = "button" },
+]
+
+[[injection]]
+id = "native-key"
+target = "horizon_client::game::native_hooks::Game<'_>::native_key"
+kind = "HEAD"
+helper = "hook_key.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+[[injection]]
+id = "native-command"
+target = "horizon_client::game::native_hooks::Game<'_>::native_command"
+kind = "HEAD"
+helper = "hook_command.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+[[injection]]
+id = "native-tick"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+kind = "HEAD"
+helper = "hook_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "native-lifecycle"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_lifecycle"
+kind = "HEAD"
+helper = "hook_lifecycle.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "phase", ty = "WorldPhase", value = "phase" },
+]
+
+[[injection]]
+id = "guest-die"
+target = "horizon_client::game::lan_actions::Game<'_>::guest_die"
+kind = "HEAD"
+cancellable = true
+helper = "hook_guest_die.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "host", ty = "&mut LanHost", value = "&mut *host" },
+  { name = "gi", ty = "usize", value = "gi" },
+  { name = "conn", ty = "u32", value = "conn" },
+]
+
+[[injection]]
+id = "owner-console-command"
+target = "horizon_client::game::integrated::Game<'_>::owner_console_command"
+kind = "HEAD"
+cancellable = true
+helper = "hook_owner_command.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+]
+
+[[injection]]
+id = "guest-command"
+target = "horizon_client::game::lan_actions::Game<'_>::guest_command"
+kind = "HEAD"
+cancellable = true
+helper = "hook_guest_command.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "host", ty = "&mut LanHost", value = "&mut *host" },
+  { name = "conn", ty = "u32", value = "conn" },
+  { name = "command", ty = "&str", value = "command" },
+]
