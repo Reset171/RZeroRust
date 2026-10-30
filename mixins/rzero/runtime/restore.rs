@@ -227,6 +227,8 @@ pub fn apply_level_snapshot_in_place(
 
     game.sculk.known.clear();
     game.sculk.known_revision = None;
+    game.world.loaded_entities.clear();
+    game.world.modified.clear();
 
     game.last_hurt_by_player = snap.last_hurt_by_player.clone();
     game.love_cause = snap.love_cause.clone();
