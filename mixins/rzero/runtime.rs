@@ -1556,23 +1556,26 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
     restore_offline_files(&snap.offline_player_data, policy.player_stats);
 
     let start_dim = game.dim;
-    let mut dims: Vec<Dim> = snap.levels.keys().copied().collect();
-    if !dims.contains(&start_dim) {
-        dims.push(start_dim);
-    }
+    let other_dims: Vec<Dim> = snap
+        .levels
+        .keys()
+        .copied()
+        .filter(|&d| d != start_dim)
+        .collect();
 
-    for dim in dims {
-        let Some(level_snap) = snap.levels.get(&dim) else {
-            continue;
-        };
-        if dim == game.dim {
-            apply_level_snapshot_in_place(game, dim, level_snap, policy);
-        } else if game.enter_level(None, dim).is_ok() {
-            apply_level_snapshot_in_place(game, dim, level_snap, policy);
+    for dim in other_dims {
+        if let Some(level_snap) = snap.levels.get(&dim) {
+            if game.enter_level(None, dim).is_ok() {
+                apply_level_snapshot_in_place(game, dim, level_snap, policy);
+            }
         }
     }
     if game.dim != start_dim {
         let _ = game.enter_level(None, start_dim);
+    }
+
+    if let Some(level_snap) = snap.levels.get(&start_dim) {
+        apply_level_snapshot_in_place(game, start_dim, level_snap, policy);
     }
 
     if let Some(mut host) = game.lan.take() {
