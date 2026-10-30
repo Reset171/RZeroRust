@@ -1,0 +1,284 @@
+use super::super::{
+    Dim, Game,
+};
+use super::snapshots::*;
+use super::types::*;
+use horizon_client::{
+    chunk::Chunk,
+    cooldowns::Cooldowns,
+    fast_hash::FxHashMap,
+    lan::guest::SavedBody,
+};
+use horizon_core::{
+    geometry::Vec3,
+    position::ChunkPos,
+    ticks::ChunkTicks,
+};
+use horizon_world::level::Ticks;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+pub fn capture_chunk_ticks(
+    chunks: &FxHashMap<(i32, i32), Arc<Chunk>>,
+    ticks: &Ticks,
+) -> HashMap<(i32, i32), (ChunkTicks, ChunkTicks)> {
+    let mut out = HashMap::new();
+    for &(cx, cz) in chunks.keys() {
+        let (b, f) = ticks.chunk_ticks(ChunkPos::new(cx, cz));
+        out.insert((cx, cz), (b, f));
+    }
+    out
+}
+
+pub fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
+    let mut map = HashMap::new();
+    let dirs = ["playerdata", "stats", "advancements"];
+    for dir_name in dirs {
+        let dir = world_root.join(dir_name);
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Ok(bytes) = fs::read(&path) {
+                        map.insert(path, bytes);
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
+pub fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
+    let raids_dat = fs::read(raids_dat_path(&game.world_root, dim)).ok();
+    LevelSnapshot {
+        chunks: game.world.chunks.clone(),
+        block_entities: (&*game.world.block_entities).clone(),
+        block_names: game.world.block_names.clone(),
+        inhabited: game.world.inhabited.clone(),
+        random: game.world.random.clone(),
+        forced_chunks: game.streaming.forced.clone(),
+        chunk_ticks: capture_chunk_ticks(&game.world.chunks, &game.block_ticks),
+        random_tick_value: game.block_ticks.random_tick_value,
+        comparator_outputs: game.block_ticks.comparator_outputs.clone(),
+        torch_toggles: game.block_ticks.torch_toggles.clone(),
+        moving_pistons: game.block_ticks.moving_pistons.clone(),
+        piston_pushes: game.block_ticks.piston_pushes.clone(),
+        block_events: game.block_ticks.block_events.clone(),
+        hoppers: game.hoppers.clone(),
+        mobs: game.mobs.clone(),
+        dropped: game.dropped.clone(),
+        orbs: game.orbs.clone(),
+        projectiles: game.creatures.projectiles.clone(),
+        boats: game.boats.clone(),
+        carts: game.carts.clone(),
+        tnts: game.tnts.clone(),
+        falling: game.falling.iter().map(FallingSnapshot::from_live).collect(),
+        paintings: game.paintings.clone(),
+        item_frames: game.item_frames.clone(),
+        armor_stands: game.armor_stands.clone(),
+        cushions: game.cushions.clone(),
+        others: game.others.clone(),
+        crystals: game.crystals.clone(),
+        dragon: game.dragon.as_ref().map(DragonSnapshot::from_live),
+        knot_ids: game.knot_ids.clone(),
+        persist_uuids: game.persist.uuids.clone(),
+        persist_raw: game.persist.raw.clone(),
+        raids_dat,
+    }
+}
+
+pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::super::Parked) -> LevelSnapshot {
+    let raids_dat = fs::read(raids_dat_path(world_root, dim)).ok();
+    LevelSnapshot {
+        chunks: p.world.chunks.clone(),
+        block_entities: (&*p.world.block_entities).clone(),
+        block_names: p.world.block_names.clone(),
+        inhabited: p.world.inhabited.clone(),
+        random: p.world.random.clone(),
+        forced_chunks: p.streaming.forced.clone(),
+        chunk_ticks: capture_chunk_ticks(&p.world.chunks, &p.block_ticks),
+        random_tick_value: p.block_ticks.random_tick_value,
+        comparator_outputs: p.block_ticks.comparator_outputs.clone(),
+        torch_toggles: p.block_ticks.torch_toggles.clone(),
+        moving_pistons: p.block_ticks.moving_pistons.clone(),
+        piston_pushes: p.block_ticks.piston_pushes.clone(),
+        block_events: p.block_ticks.block_events.clone(),
+        hoppers: p.hoppers.clone(),
+        mobs: p.mobs.clone(),
+        dropped: p.dropped.clone(),
+        orbs: p.orbs.clone(),
+        projectiles: p.projectiles.clone(),
+        boats: p.boats.clone(),
+        carts: p.carts.clone(),
+        tnts: p.tnts.clone(),
+        falling: p.falling.iter().map(FallingSnapshot::from_live).collect(),
+        paintings: p.paintings.clone(),
+        item_frames: p.item_frames.clone(),
+        armor_stands: p.armor_stands.clone(),
+        cushions: p.cushions.clone(),
+        others: p.others.clone(),
+        crystals: p.crystals.clone(),
+        dragon: p.dragon.as_ref().map(DragonSnapshot::from_live),
+        knot_ids: p.knot_ids.clone(),
+        persist_uuids: p.persist.uuids.clone(),
+        persist_raw: p.persist.raw.clone(),
+        raids_dat,
+    }
+}
+
+pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>) {
+    game.save_raids();
+    game.save_fight();
+
+    let mut guests = HashMap::new();
+    let mut online = Vec::new();
+    if let Some(host) = &game.lan {
+        for g in host.hub.guests.iter().filter(|g| g.placed) {
+            online.push(g.uuid);
+            let motion = g.motion.as_deref();
+            let (velocity, absorption, exhaustion, fire_ticks, air, fall_distance) = match motion {
+                Some(m) => (
+                    m.velocity,
+                    m.health.absorption(),
+                    m.health.food.exhaustion,
+                    m.fire_ticks,
+                    m.air,
+                    m.fall_distance,
+                ),
+                None => {
+                    let body = g.loaded_body.unwrap_or(SavedBody {
+                        fire_ticks: -20,
+                        air: 300,
+                        fall_distance: 0.0,
+                    });
+                    (
+                        Vec3::ZERO,
+                        g.saved_absorption.unwrap_or(0.0),
+                        0.0,
+                        body.fire_ticks,
+                        body.air,
+                        body.fall_distance,
+                    )
+                }
+            };
+            let (shield_cooldown, cooldowns, stats) = match host.play.get(&g.conn) {
+                Some(p) => (
+                    p.shield_cooldown,
+                    p.cooldowns.clone(),
+                    p.stats.values.clone(),
+                ),
+                None => (0, Cooldowns::default(), BTreeMap::new()),
+            };
+            guests.insert(
+                g.uuid,
+                GuestSnapshot {
+                    uuid: g.uuid,
+                    dimension: g.dimension.clone(),
+                    position: g.position,
+                    velocity,
+                    yaw: g.yaw,
+                    pitch: g.pitch,
+                    head_yaw: g.head_yaw,
+                    on_ground: g.on_ground,
+                    game_mode: g.game_mode,
+                    flying: g.flying,
+                    sprinting: g.sprinting,
+                    sneaking: g.sneaking,
+                    fall_flying: g.fall_flying,
+                    sleeping: g.sleeping,
+                    bed: g.bed,
+                    sleep_timer: g.sleep_timer,
+                    vehicle: g.vehicle,
+                    vehicle_good: g.vehicle_good,
+                    spawn: g.spawn,
+                    respawn_elsewhere: g.respawn_elsewhere.clone(),
+                    last_death: g.last_death.clone(),
+                    health: g.health,
+                    absorption,
+                    food: g.food,
+                    saturation: g.saturation,
+                    exhaustion,
+                    fire_ticks,
+                    air,
+                    fall_distance,
+                    xp_level: g.xp_level,
+                    xp_progress: g.xp_progress,
+                    xp_total: g.xp_total,
+                    xp_seed: g.xp_seed,
+                    inventory: g.inventory.clone(),
+                    armor: g.armor.clone(),
+                    offhand: g.offhand.clone(),
+                    ender_items: g.ender_items.clone(),
+                    selected: g.selected,
+                    craft_grid: g.craft_grid.clone(),
+                    craft_result: g.craft_result.clone(),
+                    effects: g.effects.list.clone(),
+                    shield_cooldown,
+                    cooldowns,
+                    recipe_book: g.recipe_book.clone(),
+                    advancements: g.advancements.clone(),
+                    stats,
+                    seen_credits: g.seen_credits,
+                    saved: g.saved.clone(),
+                },
+            );
+        }
+    }
+
+    let mut levels = HashMap::new();
+    levels.insert(game.dim, capture_level_snapshot(game, game.dim));
+    for (&dim, parked) in &game.levels.parked {
+        levels.insert(
+            dim,
+            capture_parked_snapshot(&game.world_root, dim, parked),
+        );
+    }
+
+    let now = game.world.game_time;
+    let (anchor_set, policy) = with_state_mut(|st| {
+        let anchors: HashSet<u128> = resolve_anchors(&st.anchor, &online, now, requester)
+            .into_iter()
+            .collect();
+        st.anchor_ids = anchors.clone();
+        st.has_checkpoint = true;
+        st.last_save_tick = now;
+        st.current_intensity = 0.0;
+        st.peak_intensity = 0.0;
+        st.relax_ticks = 0;
+        (anchors, st.policy)
+    });
+
+    let dragon_fight_dat = fs::read(fight_dat_path(&game.world_root)).ok();
+    let offline_player_data = backup_offline_files(&game.world_root);
+
+    let timeline = TimelineSnapshot {
+        anchor_ids: anchor_set,
+        policy,
+        game_time: game.world.game_time,
+        day_time: game.world.day_time,
+        weather: game.world.weather,
+        health_rules: game.world.health_rules,
+        rules: game.ui.rules.clone(),
+        border: game.border.clone(),
+        bossbars: game.bosses.bars.pack(),
+        sculk_tracker: game.sculk.tracker,
+        sculk_darkness: game.sculk.darkness,
+        dragon_fight_dat,
+        difficulty: game.ui.difficulty,
+        difficulty_locked: game.level.difficulty_locked,
+        world_spawn: game.level.world_spawn,
+        world_spawn_angle: game.level.world_spawn_angle,
+        next_entity: game.next_entity,
+        scoreboard: game.score.board.clone(),
+        guests,
+        offline_player_data,
+        levels,
+    };
+
+    set_snapshot(Some(timeline));
+}

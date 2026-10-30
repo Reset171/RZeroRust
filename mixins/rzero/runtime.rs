@@ -1,3 +1,6 @@
+// Auto-generated from mixins/rzero/runtime/*.rs. DO NOT EDIT DIRECTLY.
+// To modify, edit files in mixins/rzero/runtime/ and run cargo build.
+
 use super::super::{
     Dim, ExperienceOrb, FallingBlock, Game, ItemEntity, Mob,
     boats::Boat,
@@ -47,7 +50,7 @@ use horizon_protocol::{
     text::literal,
 };
 use horizon_world::{
-    level::{BlockEventData, MovingPiston},
+    level::{BlockEventData, MovingPiston, Ticks},
     nbt::Tag,
     registry::BlockStateId,
 };
@@ -60,7 +63,13 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
+// ============================================================================
+// Submodule: types.rs
+// ============================================================================
+
+
 pub const MOD_ID: &str = "rzero";
+pub const RBD_SOUND_ID: &str = "rzero:rbd_sound";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AnchorMode {
@@ -198,6 +207,136 @@ impl Default for RollbackPolicy {
         }
     }
 }
+
+pub struct RZeroState {
+    pub auto_save: bool,
+    pub adaptive_mode: bool,
+    pub use_random_interval: bool,
+    pub fixed_interval_sec: i32,
+    pub random_min_sec: i32,
+    pub random_max_sec: i32,
+    pub adaptive_interval_sec: i32,
+    pub min_save_gap_sec: i32,
+    pub relax_time_sec: i32,
+    pub post_combat_save_pct: i32,
+    pub save_on_boss_defeat: bool,
+    pub play_rollback_sound: bool,
+    pub logs: bool,
+    pub policy: RollbackPolicy,
+    pub anchor: AnchorSettings,
+    pub anchor_ids: HashSet<u128>,
+    pub has_checkpoint: bool,
+    pub last_save_tick: i64,
+    pub current_interval_ticks: i64,
+    pub last_rollback_tick: Option<i64>,
+    pub last_boss_death_tick: i64,
+    pub current_intensity: f64,
+    pub peak_intensity: f64,
+    pub relax_ticks: i32,
+    pub pending_death_rollback: Option<u128>,
+    pub pending_save_request: bool,
+    pub pending_load_request: bool,
+}
+
+impl Default for RZeroState {
+    fn default() -> Self {
+        Self {
+            auto_save: true,
+            adaptive_mode: false,
+            use_random_interval: false,
+            fixed_interval_sec: 300,
+            random_min_sec: 300,
+            random_max_sec: 600,
+            adaptive_interval_sec: 300,
+            min_save_gap_sec: 15,
+            relax_time_sec: 10,
+            post_combat_save_pct: 100,
+            save_on_boss_defeat: true,
+            play_rollback_sound: true,
+            logs: true,
+            policy: RollbackPolicy::default(),
+            anchor: AnchorSettings::default(),
+            anchor_ids: HashSet::new(),
+            has_checkpoint: false,
+            last_save_tick: 0,
+            current_interval_ticks: 6000,
+            last_rollback_tick: None,
+            last_boss_death_tick: -9999,
+            current_intensity: 0.0,
+            peak_intensity: 0.0,
+            relax_ticks: 0,
+            pending_death_rollback: None,
+            pending_save_request: false,
+            pending_load_request: false,
+        }
+    }
+}
+
+static STATE: OnceLock<Mutex<RZeroState>> = OnceLock::new();
+
+fn state_lock() -> &'static Mutex<RZeroState> {
+    STATE.get_or_init(|| Mutex::new(RZeroState::default()))
+}
+
+pub fn with_state<R>(f: impl FnOnce(&RZeroState) -> R) -> R {
+    let guard = state_lock().lock().unwrap_or_else(|e| e.into_inner());
+    f(&guard)
+}
+
+pub fn with_state_mut<R>(f: impl FnOnce(&mut RZeroState) -> R) -> R {
+    let mut guard = state_lock().lock().unwrap_or_else(|e| e.into_inner());
+    f(&mut guard)
+}
+
+pub fn raids_dat_path(world_root: &Path, dim: Dim) -> PathBuf {
+    world_root.join(dim.folder()).join("data").join("raids.dat")
+}
+
+pub fn fight_dat_path(world_root: &Path) -> PathBuf {
+    world_root.join("data").join("ender_dragon_fight.dat")
+}
+
+pub fn resolve_anchors(
+    settings: &AnchorSettings,
+    online: &[u128],
+    game_time: i64,
+    requester: Option<u128>,
+) -> Vec<u128> {
+    match settings.mode {
+        AnchorMode::Fixed => {
+            if let Some(req) = requester {
+                vec![req]
+            } else if !settings.pinned.is_empty() {
+                settings.pinned.clone()
+            } else if let Some(&first) = online.first() {
+                vec![first]
+            } else {
+                Vec::new()
+            }
+        }
+        AnchorMode::Multi => {
+            if !settings.pinned.is_empty() {
+                settings.pinned.clone()
+            } else {
+                online.to_vec()
+            }
+        }
+        AnchorMode::Everyone => online.to_vec(),
+        AnchorMode::Rotating => {
+            if online.is_empty() {
+                return Vec::new();
+            }
+            let rotation_ticks = i64::from(settings.rotation_seconds.max(5)) * 20;
+            let index = ((game_time / rotation_ticks).max(0) as usize) % online.len();
+            vec![online[index]]
+        }
+    }
+}
+
+// ============================================================================
+// Submodule: snapshots.rs
+// ============================================================================
+
 
 #[derive(Clone, Debug)]
 pub struct FallingSnapshot {
@@ -364,7 +503,7 @@ pub struct LevelSnapshot {
     pub mobs: Vec<Mob>,
     pub dropped: Vec<ItemEntity>,
     pub orbs: Vec<ExperienceOrb>,
-    pub projectiles: Vec<Projectile>,
+    pub projectiles: Vec<horizon_client::projectiles::Projectile>,
     pub boats: Vec<Boat>,
     pub carts: Vec<Minecart>,
     pub tnts: Vec<PrimedTnt>,
@@ -408,544 +547,316 @@ pub struct TimelineSnapshot {
 }
 
 std::thread_local! {
-    static SNAPSHOT: RefCell<Option<TimelineSnapshot>> = const { RefCell::new(None) };
+    pub static SNAPSHOT: RefCell<Option<TimelineSnapshot>> = const { RefCell::new(None) };
 }
 
-pub struct RZeroState {
-    pub auto_save: bool,
-    pub adaptive_mode: bool,
-    pub use_random_interval: bool,
-    pub fixed_interval_sec: i32,
-    pub random_min_sec: i32,
-    pub random_max_sec: i32,
-    pub adaptive_interval_sec: i32,
-    pub min_save_gap_sec: i32,
-    pub relax_time_sec: i32,
-    pub post_combat_save_pct: i32,
-    pub save_on_boss_defeat: bool,
-    pub play_rollback_sound: bool,
-    pub logs: bool,
-    pub policy: RollbackPolicy,
-    pub anchor: AnchorSettings,
-    pub anchor_ids: HashSet<u128>,
-    pub has_checkpoint: bool,
-    pub last_save_tick: i64,
-    pub current_interval_ticks: i64,
-    pub last_rollback_tick: Option<i64>,
-    pub last_boss_death_tick: i64,
-    pub current_intensity: f64,
-    pub peak_intensity: f64,
-    pub relax_ticks: i32,
-    pub pending_death_rollback: Option<u128>,
-    pub pending_save_request: bool,
-    pub pending_load_request: bool,
+pub fn get_snapshot_clone() -> Option<TimelineSnapshot> {
+    SNAPSHOT.with(|cell| cell.borrow().clone())
 }
 
-impl Default for RZeroState {
-    fn default() -> Self {
-        Self {
-            auto_save: true,
-            adaptive_mode: false,
-            use_random_interval: false,
-            fixed_interval_sec: 300,
-            random_min_sec: 300,
-            random_max_sec: 600,
-            adaptive_interval_sec: 300,
-            min_save_gap_sec: 30,
-            relax_time_sec: 5,
-            post_combat_save_pct: 70,
-            save_on_boss_defeat: true,
-            play_rollback_sound: true,
-            logs: false,
-            policy: RollbackPolicy::default(),
-            anchor: AnchorSettings::default(),
-            anchor_ids: HashSet::new(),
-            has_checkpoint: false,
-            last_save_tick: 0,
-            current_interval_ticks: 6000,
-            last_rollback_tick: None,
-            last_boss_death_tick: -9999,
-            current_intensity: 0.0,
-            peak_intensity: 0.0,
-            relax_ticks: 0,
-            pending_death_rollback: None,
-            pending_save_request: false,
-            pending_load_request: false,
-        }
+pub fn set_snapshot(snap: Option<TimelineSnapshot>) {
+    SNAPSHOT.with(|cell| *cell.borrow_mut() = snap);
+}
+
+pub fn clear_snapshot() {
+    SNAPSHOT.with(|cell| *cell.borrow_mut() = None);
+}
+
+// ============================================================================
+// Submodule: adaptive.rs
+// ============================================================================
+
+
+pub fn is_guest_safe(game: &Game<'_>, g: &horizon_client::lan::guest::Guest) -> bool {
+    if !g.placed || g.dead || g.health <= 1.0 {
+        return false;
     }
-}
-
-static STATE: OnceLock<Mutex<RZeroState>> = OnceLock::new();
-
-fn state_lock() -> &'static Mutex<RZeroState> {
-    STATE.get_or_init(|| Mutex::new(RZeroState::default()))
-}
-
-pub fn with_state<R>(f: impl FnOnce(&RZeroState) -> R) -> R {
-    let guard = state_lock().lock().unwrap_or_else(|e| e.into_inner());
-    f(&guard)
-}
-
-pub fn with_state_mut<R>(f: impl FnOnce(&mut RZeroState) -> R) -> R {
-    let mut guard = state_lock().lock().unwrap_or_else(|e| e.into_inner());
-    f(&mut guard)
-}
-
-pub fn register_native_mod(mods: &mut Vec<NativeMod>) {
-    mods.push(NativeMod {
-        id: MOD_ID.to_owned(),
-        title: "RZero 0.1.0".to_owned(),
-        description:
-            "Return by Death. Completely rewind the timeline and the world state to your last checkpoint upon death."
-                .to_owned(),
-        keys: vec![
-            [
-                "save".to_owned(),
-                "Create Checkpoint".to_owned(),
-                "key.keyboard.f6".to_owned(),
-            ],
-            [
-                "load".to_owned(),
-                "Return to Checkpoint".to_owned(),
-                "key.keyboard.f7".to_owned(),
-            ],
-            [
-                "anchor_menu".to_owned(),
-                "Cycle Key Player Mode".to_owned(),
-                "key.keyboard.f8".to_owned(),
-            ],
-        ],
-    });
-}
-
-pub fn populate_settings(game: &mut Game<'_>, mod_id: &str, buttons: &mut Vec<String>) {
-    if mod_id != MOD_ID {
-        return;
+    if g.effects.list.iter().any(|e| e.id == "levitation") {
+        return false;
     }
-    load_saved_settings(game);
-    with_state(|st| {
-        buttons.push(format!(
-            "Auto-Save: {}",
-            if st.auto_save { "ON" } else { "OFF" }
-        ));
-        buttons.push(format!(
-            "Adaptive Save: {}",
-            if st.adaptive_mode { "ON" } else { "OFF" }
-        ));
-        buttons.push(format!("Auto-Save Interval: {} s", st.fixed_interval_sec));
-        buttons.push(format!("Key Player Mode: {}", st.anchor.mode.id()));
-        let cd = st.anchor.rollback_cooldown_seconds;
-        buttons.push(if cd <= 0 {
-            "Rollback Cooldown: Off".to_owned()
-        } else {
-            format!("Rollback Cooldown: {cd} s")
-        });
-        buttons.push(format!(
-            "Checkpoint on Boss Defeat: {}",
-            if st.save_on_boss_defeat { "ON" } else { "OFF" }
-        ));
-        buttons.push(format!("Logs: {}", if st.logs { "ON" } else { "OFF" }));
-    });
-}
-
-pub fn handle_settings_click(game: &mut Game<'_>, mod_id: &str, button: usize) {
-    if mod_id != MOD_ID {
-        return;
+    let (fire_ticks, fall_distance) = match g.motion.as_deref() {
+        Some(m) => (m.fire_ticks, m.fall_distance as f32),
+        None => (0, 0.0),
+    };
+    if fire_ticks > 0 {
+        return false;
     }
-    with_state_mut(|st| match button {
-        0 => st.auto_save = !st.auto_save,
-        1 => st.adaptive_mode = !st.adaptive_mode,
-        2 => {
-            st.fixed_interval_sec = match st.fixed_interval_sec {
-                60 => 180,
-                180 => 300,
-                300 => 600,
-                600 => 1200,
-                _ => 60,
-            };
-            st.current_interval_ticks = i64::from(st.fixed_interval_sec) * 20;
-        }
-        3 => st.anchor.mode = st.anchor.mode.next(),
-        4 => {
-            st.anchor.rollback_cooldown_seconds = match st.anchor.rollback_cooldown_seconds {
-                0 => 10,
-                10 => 30,
-                30 => 60,
-                60 => 300,
-                _ => 0,
-            };
-            st.last_rollback_tick = None;
-        }
-        5 => st.save_on_boss_defeat = !st.save_on_boss_defeat,
-        6 => st.logs = !st.logs,
-        _ => {}
+    let bx = g.position[0].floor() as i32;
+    let by = g.position[1].floor() as i32;
+    let bz = g.position[2].floor() as i32;
+    let facts = game.res.facts();
+    let here_fluid = facts.get(game.world.block(bx, by, bz)).fluid;
+    if here_fluid == Fluid::Lava {
+        return false;
+    }
+    let pos_vec = Vec3::new(g.position[0], g.position[1], g.position[2]);
+    let imminent_tnt = game
+        .tnts
+        .iter()
+        .any(|t| t.fuse <= 60 && t.position.distance_squared(pos_vec) <= 64.0);
+    let imminent_creeper = game.mobs.iter().any(|m| {
+        m.alive()
+            && m.species() == Species::Creeper
+            && (m.extra.counter > 0 || m.extra.flag)
+            && m.position.distance_squared(pos_vec) <= 49.0
     });
-    save_current_settings(game);
-}
-
-fn load_saved_settings(game: &Game<'_>) {
-    let auto_save = game
-        .native_setting(MOD_ID, "auto_save")
-        .map(|v| v != "false");
-    let adaptive = game
-        .native_setting(MOD_ID, "adaptive_mode")
-        .map(|v| v == "true");
-    let interval = game
-        .native_setting(MOD_ID, "fixed_interval_sec")
-        .and_then(|v| v.parse::<i32>().ok());
-    let mode = game
-        .native_setting(MOD_ID, "anchor_mode")
-        .map(|v| AnchorMode::by_id(&v));
-    let cooldown = game
-        .native_setting(MOD_ID, "rollback_cooldown_sec")
-        .and_then(|v| v.parse::<i32>().ok());
-    let boss_save = game
-        .native_setting(MOD_ID, "save_on_boss_defeat")
-        .map(|v| v != "false");
-    let logs = game.native_setting(MOD_ID, "logs").map(|v| v == "true");
-
-    let json_cfg = fs::read_to_string(Path::new("config").join("rzero.json"))
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
-
-    with_state_mut(|st| {
-        if let Some(v) = &json_cfg {
-            let b = |val: &serde_json::Value, d: bool| val.as_bool().unwrap_or(d);
-            let rb = &v["checkpointPolicy"]["rollback"];
-            if rb.is_object() {
-                st.policy.blocks = b(&rb["blocks"], true);
-                st.policy.biomes = b(&rb["biomes"], true);
-                st.policy.block_entities = b(&rb["block_entities"], true);
-                st.policy.block_ticks = b(&rb["block_ticks"], true);
-                st.policy.fluid_ticks = b(&rb["fluid_ticks"], true);
-                st.policy.block_events = b(&rb["block_events"], true);
-                let ent = &rb["entities"];
-                if ent.is_object() {
-                    st.policy.entities_presence = b(&ent["presence"], true);
-                    st.policy.dropped_items = b(&ent["dropped_items"], true);
-                    st.policy.experience_orbs = b(&ent["experience_orbs"], true);
-                }
-                let pl = &rb["players"];
-                if pl.is_object() {
-                    st.policy.player_position = b(&pl["position"], true);
-                    st.policy.player_motion = b(&pl["motion"], true);
-                    st.policy.player_health = b(&pl["health"], true);
-                    st.policy.player_hunger = b(&pl["hunger"], true);
-                    st.policy.player_experience = b(&pl["experience"], true);
-                    st.policy.player_inventory = b(&pl["inventory"], true);
-                    st.policy.player_ender_chest = b(&pl["ender_chest"], true);
-                    st.policy.player_potion_effects = b(&pl["potion_effects"], true);
-                    st.policy.player_cooldowns = b(&pl["cooldowns"], true);
-                    st.policy.player_abilities = b(&pl["abilities"], true);
-                    st.policy.player_recipe_book = b(&pl["recipe_book"], true);
-                    st.policy.player_spawn_point = b(&pl["spawn_point"], true);
-                    st.policy.player_stats = b(&pl["stats"], true);
-                    st.policy.preserve_new_player_inventory =
-                        b(&pl["preserve_new_player_inventory"], false);
-                }
-                let w = &rb["world"];
-                if w.is_object() {
-                    st.policy.world_time = b(&w["time"], true);
-                    st.policy.world_weather = b(&w["weather"], true);
-                    st.policy.world_raids = b(&w["raids"], true);
-                    st.policy.world_dragon_fight = b(&w["dragon_fight"], true);
-                    st.policy.world_scoreboard = b(&w["scoreboard"], true);
-                    st.policy.world_level_rng = b(&w["level_rng"], true);
-                    st.policy.world_difficulty = b(&w["difficulty"], true);
-                    st.policy.world_spawn = b(&w["world_spawn"], true);
-                    let sg = &w["server_globals"];
-                    if sg.is_object() {
-                        st.policy.server_bossbars = b(&sg["bossbars"], true);
-                        st.policy.server_forced_chunks = b(&sg["forced_chunks"], true);
-                        st.policy.server_world_border = b(&sg["world_border"], true);
-                        st.policy.server_game_rules = b(&sg["game_rules"], true);
-                    }
-                }
+    if imminent_tnt || imminent_creeper {
+        return false;
+    }
+    if !g.on_ground && !g.flying && !g.creative() && !g.spectator() {
+        let min_y = game.dim.min_y();
+        let mut probe_y = by;
+        let mut found_ground = false;
+        let mut expected_damage = 0.0f32;
+        for _ in 0..256 {
+            probe_y -= 1;
+            if probe_y < min_y {
+                break;
             }
-            let ad = &v["adaptive"];
-            if ad.is_object() {
-                if let Some(gap) = ad["min_save_gap_seconds"].as_i64() {
-                    st.min_save_gap_sec = (gap as i32).max(5);
-                }
-                if let Some(rel) = ad["relax_time_seconds"].as_i64() {
-                    st.relax_time_sec = (rel as i32).max(1);
-                }
-                if let Some(pct) = ad["post_combat_save_percent"].as_i64() {
-                    st.post_combat_save_pct = (pct as i32).clamp(0, 100);
-                }
-                st.save_on_boss_defeat = b(&ad["save_on_boss_defeat"], st.save_on_boss_defeat);
+            let st = game.world.block(bx, probe_y, bz);
+            let f = facts.get(st);
+            if facts.is_air(st) && f.fluid == Fluid::None {
+                continue;
             }
+            if f.fluid == Fluid::Lava {
+                return false;
+            }
+            found_ground = true;
+            if f.fluid == Fluid::None {
+                let total_fall = fall_distance + (g.position[1] as f32 - probe_y as f32);
+                expected_damage = total_fall - 3.0;
+            }
+            break;
         }
-        if let Some(v) = auto_save {
-            st.auto_save = v;
+        if !found_ground || expected_damage >= g.health {
+            return false;
         }
-        if let Some(v) = adaptive {
-            st.adaptive_mode = v;
-        }
-        if let Some(v) = interval {
-            st.fixed_interval_sec = v.max(5);
-            st.current_interval_ticks = i64::from(st.fixed_interval_sec) * 20;
-        }
-        if let Some(v) = mode {
-            st.anchor.mode = v;
-        }
-        if let Some(v) = cooldown {
-            st.anchor.rollback_cooldown_seconds = v.max(0);
-        }
-        if let Some(v) = boss_save {
-            st.save_on_boss_defeat = v;
-        }
-        if let Some(v) = logs {
-            st.logs = v;
-        }
-    });
-}
-
-fn save_current_settings(game: &Game<'_>) {
-    with_state(|st| {
-        game.native_set_setting(
-            MOD_ID,
-            "auto_save",
-            if st.auto_save { "true" } else { "false" },
-        );
-        game.native_set_setting(
-            MOD_ID,
-            "adaptive_mode",
-            if st.adaptive_mode { "true" } else { "false" },
-        );
-        game.native_set_setting(
-            MOD_ID,
-            "fixed_interval_sec",
-            &st.fixed_interval_sec.to_string(),
-        );
-        game.native_set_setting(MOD_ID, "anchor_mode", st.anchor.mode.id());
-        game.native_set_setting(
-            MOD_ID,
-            "rollback_cooldown_sec",
-            &st.anchor.rollback_cooldown_seconds.to_string(),
-        );
-        game.native_set_setting(
-            MOD_ID,
-            "save_on_boss_defeat",
-            if st.save_on_boss_defeat {
-                "true"
-            } else {
-                "false"
-            },
-        );
-        game.native_set_setting(MOD_ID, "logs", if st.logs { "true" } else { "false" });
-    });
-}
-
-pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
-    if !pressed || !game.native_on(MOD_ID) || !game.native_playing() {
-        return;
     }
-    let save_key = game.native_mod_key(MOD_ID, "save", "key.keyboard.f6");
-    let load_key = game.native_mod_key(MOD_ID, "load", "key.keyboard.f7");
-    let mode_key = game.native_mod_key(MOD_ID, "anchor_menu", "key.keyboard.f8");
+    true
+}
 
-    if key == save_key {
-        if let Some(server) = &game.integrated {
-            let msg = server.call(|srv| {
-                create_checkpoint_on_server(srv, None);
-                "[RZero] Checkpoint created successfully.".to_owned()
-            });
-            if let Some(text) = msg {
-                game.native_chat(&text);
-            }
-        } else {
-            with_state_mut(|st| st.pending_save_request = true);
+pub fn pack_pos(x: i32, y: i32, z: i32) -> i64 {
+    ((x as i64 & 0x3FF_FFFF) << 38) | ((z as i64 & 0x3FF_FFFF) << 12) | (y as i64 & 0xFFF)
+}
+
+pub fn unpack_pos(packed: i64) -> (i32, i32, i32) {
+    let x = (packed >> 38) as i32;
+    let z = ((packed << 26) >> 38) as i32;
+    let y = ((packed << 52) >> 52) as i32;
+    (x, y, z)
+}
+
+pub fn flood_escape_space(
+    game: &Game<'_>,
+    start: [i32; 3],
+    blocked: Option<&HashSet<i64>>,
+    allow_drops: bool,
+) -> (usize, usize) {
+    const MAX_VISITED: usize = 200;
+    const MAX_DIST: i32 = 6;
+    const DX: [i32; 4] = [0, 0, -1, 1];
+    const DZ: [i32; 4] = [-1, 1, 0, 0];
+
+    let min_dy = if allow_drops { -3 } else { -2 };
+    let facts = game.res.facts();
+    let mut visited = HashSet::with_capacity(MAX_VISITED);
+    let mut queue = VecDeque::with_capacity(MAX_VISITED);
+    let start_long = pack_pos(start[0], start[1], start[2]);
+    visited.insert(start_long);
+    queue.push_back(start_long);
+    let mut cliffs = 0usize;
+
+    while let Some(curr) = queue.pop_front() {
+        if visited.len() >= MAX_VISITED {
+            break;
         }
-    } else if key == load_key {
-        if let Some(server) = &game.integrated {
-            let msg = server.call(|srv| {
-                if rollback_checkpoint_on_server(srv) {
-                    format!(
-                        "[RZero] Timeline rolled back to checkpoint (tick={}).",
-                        srv.world.game_time
-                    )
+        let (cx, cy, cz) = unpack_pos(curr);
+        for dir in 0..4 {
+            let nx = cx + DX[dir];
+            let nz = cz + DZ[dir];
+            let mut target = None;
+            let mut is_cliff = false;
+            for dy in (min_dy..=1).rev() {
+                let ny = cy + dy;
+                let st_f = facts.get(game.world.block(nx, ny, nz));
+                let fl_f = facts.get(game.world.block(nx, ny - 1, nz));
+                let state_blocks = st_f.full_collision || st_f.legacy_solid;
+                let floor_blocks = fl_f.full_collision || fl_f.legacy_solid;
+                let floor_fluid = fl_f.fluid != Fluid::None;
+                let floor_lava = fl_f.fluid == Fluid::Lava;
+                let standable = if allow_drops {
+                    floor_blocks || floor_fluid
                 } else {
-                    "[RZero] Rollback aborted: No timeline origin found.".to_owned()
+                    floor_blocks
+                };
+                if !state_blocks && standable {
+                    target = Some((nx, ny, nz));
+                    if allow_drops && (dy <= min_dy || floor_lava) {
+                        is_cliff = true;
+                    }
+                    break;
                 }
-            });
-            if let Some(text) = msg {
-                game.native_chat(&text);
             }
-        } else {
-            with_state_mut(|st| st.pending_load_request = true);
+            if is_cliff {
+                cliffs += 1;
+            }
+            let Some((tx, ty, tz)) = target else {
+                continue;
+            };
+            let t_long = pack_pos(tx, ty, tz);
+            if visited.contains(&t_long) {
+                continue;
+            }
+            if blocked.is_some_and(|b| b.contains(&t_long)) {
+                continue;
+            }
+            let dist = (tx - start[0]).abs() + (ty - start[1]).abs() + (tz - start[2]).abs();
+            if dist <= MAX_DIST {
+                visited.insert(t_long);
+                queue.push_back(t_long);
+            }
         }
-    } else if key == mode_key {
-        let next_mode = with_state_mut(|st| {
-            st.anchor.mode = st.anchor.mode.next();
-            st.anchor.mode
+    }
+    (visited.len(), cliffs)
+}
+
+pub fn calculate_guest_threat(game: &Game<'_>, g: &horizon_client::lan::guest::Guest) -> f64 {
+    if !is_guest_safe(game, g) {
+        return -1.0;
+    }
+    let hp_pct = (g.health / 20.0).clamp(0.0, 1.0);
+    let mut env_threat = f64::from(1.0 - hp_pct) * 60.0;
+    if g.food < 6 {
+        env_threat += 15.0;
+    }
+    let air = g.motion.as_deref().map_or(300, |m| m.air);
+    if air < 150 {
+        let air_pct = air as f32 / 300.0;
+        env_threat += f64::from(0.5 - air_pct) * 80.0;
+    }
+    if g.effects
+        .list
+        .iter()
+        .any(|e| matches!(e.id, "poison" | "wither"))
+    {
+        env_threat += 40.0;
+    }
+
+    let p_vec = Vec3::new(g.position[0], g.position[1], g.position[2]);
+    let mut mobs_tracking = 0;
+    let mut mobs_attacking = 0;
+    let mut mob_cells = HashSet::new();
+    for m in &game.mobs {
+        if !m.alive() || !m.hostile() {
+            continue;
+        }
+        let d2 = m.position.distance_squared(p_vec);
+        if d2 > 256.0 {
+            continue;
+        }
+        if m.ai.target.is_some() || d2 < 16.0 {
+            mobs_tracking += 1;
+            if d2 < 9.0 || m.ai.aggressive {
+                mobs_attacking += 1;
+            }
+            let mx = m.position.x.floor() as i32;
+            let my = m.position.y.floor() as i32;
+            let mz = m.position.z.floor() as i32;
+            mob_cells.insert(pack_pos(mx, my, mz));
+        }
+    }
+
+    let mob_threat = (f64::from(mobs_tracking) * 5.0 + f64::from(mobs_attacking) * 25.0).min(60.0);
+    if mob_threat == 0.0 {
+        env_threat *= 0.5;
+    }
+    let mut total_threat = (env_threat + mob_threat).min(100.0);
+    if mobs_tracking > 0 {
+        let start = [
+            g.position[0].floor() as i32,
+            g.position[1].floor() as i32,
+            g.position[2].floor() as i32,
+        ];
+        let (free_space, cliffs) = flood_escape_space(game, start, None, true);
+        let (safe_space, _) = flood_escape_space(game, start, Some(&mob_cells), false);
+        if free_space > 0 {
+            let cornered = 1.0 - (safe_space as f64 / free_space as f64);
+            total_threat = (total_threat + cornered * 15.0 + (cliffs.min(4) as f64) * 2.5).min(100.0);
+        }
+    }
+    total_threat
+}
+
+pub fn tick_autosave_on_server(game: &mut Game<'_>) {
+    let now = game.world.game_time;
+
+    let boss_just_died = game.dragon.as_ref().is_some_and(|d| d.death_time == 1)
+        || game.mobs.iter().any(|m| {
+            m.species() == Species::Wither && !m.alive() && m.death_time == 1
         });
-        save_current_settings(game);
-        game.native_chat(&format!("[RZero] Key player mode: {}", next_mode.id()));
-    }
-}
-
-pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool) {
-    if !game.native_on(MOD_ID) {
-        return;
-    }
-    let trimmed = command.trim().trim_start_matches('/');
-    if !trimmed.starts_with("rzero") && trimmed != "rzero" {
-        return;
-    }
-    if let Some(first) = trimmed.split_whitespace().next()
-        && first != "rzero"
-    {
-        return;
-    }
-    *ran = true;
-    let cmd_owned = trimmed.to_owned();
-    if let Some(server) = &game.integrated {
-        if let Some(lines) = server.call(move |srv| execute_rzero_command(srv, None, &cmd_owned)) {
-            for line in lines {
-                game.native_chat(&line);
+    if boss_just_died {
+        let should_boss_save = with_state_mut(|st| {
+            if st.save_on_boss_defeat && now - st.last_boss_death_tick > 100 {
+                st.last_boss_death_tick = now;
+                true
+            } else {
+                false
+            }
+        });
+        if should_boss_save {
+            let safe = game
+                .lan
+                .as_ref()
+                .is_some_and(|h| h.hub.guests.iter().any(|g| is_guest_safe(game, g)));
+            if safe {
+                create_checkpoint_on_server(game, None);
+                if with_state(|st| st.logs) {
+                    game.system_message(Text::literal(
+                        "[RZero] Boss defeat checkpoint created.",
+                    ));
+                }
+                return;
             }
         }
-    } else {
-        for line in execute_rzero_command(game, None, &cmd_owned) {
-            game.native_chat(&line);
+    }
+
+    let (auto_save, adaptive_mode) = with_state(|st| (st.auto_save, st.adaptive_mode));
+    if !auto_save {
+        return;
+    }
+
+    if !adaptive_mode {
+        let due = with_state(|st| now - st.last_save_tick >= st.current_interval_ticks.max(100));
+        if !due {
+            return;
         }
-    }
-}
-
-pub fn intercept_owner_console_command(
-    game: &mut Game<'_>,
-    command: &str,
-) -> ControlFlow<Vec<String>> {
-    if !game.native_on(MOD_ID) {
-        return ControlFlow::Continue(());
-    }
-    let trimmed = command.trim().trim_start_matches('/');
-    if trimmed.split_whitespace().next() != Some("rzero") {
-        return ControlFlow::Continue(());
-    }
-    let owner = game.serving.as_ref().map(|s| s.owner);
-    let lines = execute_rzero_command(game, owner, trimmed);
-    if let Some(host) = &game.lan
-        && let Some(owner_uuid) = owner
-        && let Some(g) = host.hub.guests.iter().find(|g| g.uuid == owner_uuid)
-    {
-        for line in &lines {
-            g.send(&C::SystemChat(play::SystemChat {
-                content: literal(line),
-                overlay: false,
-            }));
-        }
-    }
-    ControlFlow::Break(lines)
-}
-
-pub fn intercept_guest_command(
-    game: &mut Game<'_>,
-    host: &mut LanHost,
-    conn: u32,
-    command: &str,
-) -> ControlFlow<()> {
-    if !game.native_on(MOD_ID) {
-        return ControlFlow::Continue(());
-    }
-    let trimmed = command.trim().trim_start_matches('/');
-    if trimmed.split_whitespace().next() != Some("rzero") {
-        return ControlFlow::Continue(());
-    }
-    let requester = host.hub.guest(conn).map(|g| g.uuid);
-    game.lan = Some(std::mem::replace(host, empty_lan_placeholder()));
-    let lines = execute_rzero_command(game, requester, trimmed);
-    if let Some(restored_host) = game.lan.take() {
-        *host = restored_host;
-    }
-    for line in lines {
-        host.hub.send_to(
-            conn,
-            &C::SystemChat(play::SystemChat {
-                content: literal(&line),
-                overlay: false,
-            }),
-        );
-    }
-    ControlFlow::Break(())
-}
-
-fn empty_lan_placeholder() -> LanHost {
-    unreachable!("game.lan is always restored")
-}
-
-pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
-    match phase {
-        WorldPhase::WorldOpenReady => {
-            load_saved_settings(game);
-            SNAPSHOT.with(|cell| *cell.borrow_mut() = None);
+        let any_safe = game
+            .lan
+            .as_ref()
+            .is_some_and(|h| h.hub.guests.iter().any(|g| is_guest_safe(game, g)));
+        if any_safe {
+            create_checkpoint_on_server(game, None);
             with_state_mut(|st| {
-                st.has_checkpoint = false;
-                st.anchor_ids.clear();
-                st.pending_death_rollback = None;
-                st.last_save_tick = game.world.game_time;
-                st.current_interval_ticks = i64::from(st.fixed_interval_sec.max(5)) * 20;
-                st.last_rollback_tick = None;
-                st.last_boss_death_tick = -9999;
-                st.current_intensity = 0.0;
-                st.peak_intensity = 0.0;
-                st.relax_ticks = 0;
+                st.current_interval_ticks = if st.use_random_interval {
+                    let min = st.random_min_sec.max(5);
+                    let max = st.random_max_sec.max(min + 1);
+                    let mut rng = LegacyRandom::new(now);
+                    let extra = rng.next_int_bound((max - min) + 1).unwrap_or(0);
+                    i64::from(min + extra) * 20
+                } else {
+                    i64::from(st.fixed_interval_sec.max(5)) * 20
+                };
             });
+            if with_state(|st| st.logs) {
+                game.system_message(Text::literal("[RZero] Auto-saved checkpoint."));
+            }
         }
-        WorldPhase::WorldCloseFinal
-        | WorldPhase::WorldCloseFailed
-        | WorldPhase::WorldOpenFailed => {
-            SNAPSHOT.with(|cell| *cell.borrow_mut() = None);
-            with_state_mut(|st| {
-                st.has_checkpoint = false;
-                st.anchor_ids.clear();
-                st.pending_death_rollback = None;
-            });
-        }
-    }
-}
-
-pub fn handle_tick(game: &mut Game<'_>) {
-    if !game.native_on(MOD_ID) {
-        return;
-    }
-    if game.native_window() {
         return;
     }
 
-    let (do_save, do_load, dead_rollback) = with_state_mut(|st| {
-        (
-            std::mem::replace(&mut st.pending_save_request, false),
-            std::mem::replace(&mut st.pending_load_request, false),
-            st.pending_death_rollback.take(),
-        )
-    });
-
-    if do_save {
-        create_checkpoint_on_server(game, None);
-    }
-    if do_load || dead_rollback.is_some() {
-        rollback_checkpoint_on_server(game);
+    let Some(host) = &game.lan else {
         return;
-    }
-
-    tick_autosave_on_server(game);
-}
-
-pub fn intercept_guest_die(
-    game: &mut Game<'_>,
-    host: &mut LanHost,
-    gi: usize,
-    _conn: u32,
-) -> ControlFlow<()> {
-    if !game.native_on(MOD_ID) {
-        return ControlFlow::Continue(());
-    }
-    if host.hub.guests[gi].health > 0.0 || host.hub.guests[gi].dead {
-        return ControlFlow::Continue(());
-    }
-    let player_uuid = host.hub.guests[gi].uuid;
+    };
     let online: Vec<u128> = host
         .hub
         .guests
@@ -953,312 +864,117 @@ pub fn intercept_guest_die(
         .filter(|g| g.placed)
         .map(|g| g.uuid)
         .collect();
-    let now = game.world.game_time;
+    let anchors = with_state(|st| resolve_anchors(&st.anchor, &online, now, None));
+    let mut max_threat = 0.0f64;
+    let mut any_anchor_here = false;
+    for g in host
+        .hub
+        .guests
+        .iter()
+        .filter(|g| g.placed && anchors.contains(&g.uuid) && g.dimension == game.dim.id())
+    {
+        any_anchor_here = true;
+        let threat = calculate_guest_threat(game, g);
+        if threat < 0.0 {
+            with_state_mut(|st| st.relax_ticks = 0);
+            return;
+        }
+        if threat > max_threat {
+            max_threat = threat;
+        }
+    }
+    if !any_anchor_here {
+        return;
+    }
 
-    let should_intercept = with_state_mut(|st| {
-        if !st.has_checkpoint {
-            return false;
+    let mut rng = LegacyRandom::new(now ^ 0x5DEECE66D);
+    let rand_f = rng.next_float();
+    let should_save = with_state_mut(|st| {
+        let since_last = now - st.last_save_tick;
+        if max_threat > st.current_intensity {
+            st.current_intensity += (max_threat - st.current_intensity) * 0.2;
+            st.relax_ticks = 0;
+        } else {
+            st.current_intensity -= (st.current_intensity - max_threat) * 0.02;
         }
-        let active_anchors = resolve_anchors(&st.anchor, &online, now, None);
-        let is_anchor =
-            active_anchors.contains(&player_uuid) || st.anchor_ids.contains(&player_uuid);
-        if !is_anchor {
-            return false;
+        if st.current_intensity > st.peak_intensity {
+            st.peak_intensity = st.current_intensity;
         }
-        let cd = st.anchor.rollback_cooldown_seconds;
-        if cd > 0
-            && let Some(last) = st.last_rollback_tick
-            && now >= last
-            && now - last < i64::from(cd) * 20
-        {
-            return false;
+
+        let relax_req = (st.relax_time_sec * 20).max(20);
+        let min_gap = (i64::from(st.min_save_gap_sec) * 20).max(100);
+        let chance = st.post_combat_save_pct as f32 / 100.0;
+
+        let mut trigger = false;
+        if st.peak_intensity > 35.0 {
+            if st.current_intensity < st.peak_intensity * 0.5 && max_threat <= 20.0 {
+                st.relax_ticks += 1;
+                if st.relax_ticks > relax_req {
+                    if rand_f < chance {
+                        trigger = true;
+                    } else {
+                        st.peak_intensity = 0.0;
+                        st.current_intensity = 0.0;
+                        st.relax_ticks = 0;
+                    }
+                }
+            } else {
+                st.relax_ticks = 0;
+            }
+        } else {
+            let tranquil_ticks = i64::from(st.adaptive_interval_sec.max(60)) * 20;
+            if since_last >= tranquil_ticks && max_threat <= 10.0 {
+                trigger = true;
+            }
         }
-        st.last_rollback_tick = Some(now);
-        st.pending_death_rollback = Some(player_uuid);
-        true
+        trigger && since_last > min_gap
     });
 
-    if !should_intercept {
-        return ControlFlow::Continue(());
+    if should_save {
+        create_checkpoint_on_server(game, None);
+        if with_state(|st| st.logs) {
+            game.system_message(Text::literal("[RZero] Adaptive checkpoint created."));
+        }
     }
-
-    let g = &mut host.hub.guests[gi];
-    g.health = 20.0;
-    g.dead = false;
-    g.death_time = 0;
-    g.sent_health = None;
-    if let Some(m) = g.motion.as_mut() {
-        let _ = m.set_health(20.0, false);
-    }
-    ControlFlow::Break(())
 }
 
-fn resolve_anchors(
-    settings: &AnchorSettings,
-    online: &[u128],
-    game_time: i64,
-    requester: Option<u128>,
-) -> Vec<u128> {
-    let mut sorted = online.to_vec();
-    sorted.sort_unstable();
-    let mut out = Vec::new();
-    match settings.mode {
-        AnchorMode::Everyone => out.extend_from_slice(&sorted),
-        AnchorMode::Multi => {
-            for &id in &settings.pinned {
-                if sorted.contains(&id) && !out.contains(&id) {
-                    out.push(id);
-                }
-            }
-        }
-        AnchorMode::Rotating => {
-            if !sorted.is_empty() {
-                let ticks = i64::from(settings.rotation_seconds.max(5)) * 20;
-                let idx = game_time
-                    .div_euclid(ticks)
-                    .rem_euclid(sorted.len() as i64) as usize;
-                out.push(sorted[idx]);
-            }
-        }
-        AnchorMode::Fixed => {
-            for &id in &settings.pinned {
-                if sorted.contains(&id) {
-                    out.push(id);
-                    break;
-                }
-            }
-        }
-    }
-    if out.is_empty() {
-        if let Some(req) = requester {
-            out.push(req);
-        } else if let Some(&first) = sorted.first() {
-            out.push(first);
-        }
+// ============================================================================
+// Submodule: capture.rs
+// ============================================================================
+
+
+pub fn capture_chunk_ticks(
+    chunks: &FxHashMap<(i32, i32), Arc<Chunk>>,
+    ticks: &Ticks,
+) -> HashMap<(i32, i32), (ChunkTicks, ChunkTicks)> {
+    let mut out = HashMap::new();
+    for &(cx, cz) in chunks.keys() {
+        let (b, f) = ticks.chunk_ticks(ChunkPos::new(cx, cz));
+        out.insert((cx, cz), (b, f));
     }
     out
 }
 
-fn execute_rzero_command(
-    game: &mut Game<'_>,
-    requester: Option<u128>,
-    command: &str,
-) -> Vec<String> {
-    let words: Vec<&str> = command.split_whitespace().collect();
-    let sub = words.get(1).copied().unwrap_or("status");
-    let reply = match sub {
-        "set" | "save" => {
-            create_checkpoint_on_server(game, requester);
-            "[RZero] Checkpoint created successfully.".to_owned()
-        }
-        "load" | "rollback" => {
-            if rollback_checkpoint_on_server(game) {
-                format!(
-                    "[RZero] Timeline rolled back to checkpoint (tick={}).",
-                    game.world.game_time
-                )
-            } else {
-                "[RZero] Rollback aborted: No timeline origin found.".to_owned()
+pub fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
+    let mut map = HashMap::new();
+    let dirs = ["playerdata", "stats", "advancements"];
+    for dir_name in dirs {
+        let dir = world_root.join(dir_name);
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Ok(bytes) = fs::read(&path) {
+                        map.insert(path, bytes);
+                    }
+                }
             }
         }
-        "status" => report_status(game),
-        "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
-        "autosave" => handle_autosave_subcommand(game, &words[2..]),
-        _ => "[RZero] Usage: /rzero <set|load|status|anchor|autosave>".to_owned(),
-    };
-    vec![reply]
-}
-
-fn handle_anchor_subcommand(
-    game: &mut Game<'_>,
-    args: &[&str],
-    requester: Option<u128>,
-) -> String {
-    match args.first().copied().unwrap_or("status") {
-        "cooldown" => {
-            let seconds = args
-                .get(1)
-                .and_then(|s| s.parse::<i32>().ok())
-                .unwrap_or(0)
-                .max(0);
-            with_state_mut(|st| {
-                st.anchor.rollback_cooldown_seconds = seconds;
-                st.last_rollback_tick = None;
-            });
-            save_current_settings(game);
-            if seconds <= 0 {
-                "[RZero] Rollback cooldown disabled: every key player death rewinds the world."
-                    .to_owned()
-            } else {
-                format!("[RZero] Rollback cooldown: {seconds} (in seconds)")
-            }
-        }
-        "mode" => {
-            let mode = AnchorMode::by_id(args.get(1).copied().unwrap_or("fixed"));
-            let rot = args
-                .get(2)
-                .and_then(|s| s.parse::<i32>().ok())
-                .unwrap_or(300)
-                .max(5);
-            with_state_mut(|st| {
-                st.anchor.mode = mode;
-                if mode == AnchorMode::Rotating {
-                    st.anchor.rotation_seconds = rot;
-                }
-                if matches!(mode, AnchorMode::Fixed | AnchorMode::Multi)
-                    && let Some(req) = requester
-                {
-                    st.anchor.pinned = vec![req];
-                }
-            });
-            save_current_settings(game);
-            format!("[RZero] Key player mode: {}", mode.id())
-        }
-        _ => report_status(game),
-    }
-}
-
-fn handle_autosave_subcommand(game: &mut Game<'_>, args: &[&str]) -> String {
-    match args.first().copied().unwrap_or("status") {
-        "on" | "interval" => {
-            let sec = args.get(1).and_then(|s| s.parse::<i32>().ok());
-            with_state_mut(|st| {
-                st.auto_save = true;
-                st.adaptive_mode = false;
-                if let Some(s) = sec {
-                    st.fixed_interval_sec = s.max(5);
-                }
-                st.current_interval_ticks = i64::from(st.fixed_interval_sec) * 20;
-            });
-            save_current_settings(game);
-            "[RZero] Interval auto-save enabled.".to_owned()
-        }
-        "adaptive" => {
-            let sec = args.get(1).and_then(|s| s.parse::<i32>().ok());
-            with_state_mut(|st| {
-                st.auto_save = true;
-                st.adaptive_mode = true;
-                if let Some(s) = sec {
-                    st.adaptive_interval_sec = s.max(60);
-                }
-            });
-            save_current_settings(game);
-            "[RZero] Adaptive auto-save enabled.".to_owned()
-        }
-        "off" => {
-            with_state_mut(|st| st.auto_save = false);
-            save_current_settings(game);
-            "[RZero] Auto-save disabled.".to_owned()
-        }
-        _ => with_state(|st| {
-            format!(
-                "[RZero] Auto-save: {} | adaptive: {} | interval: {}s",
-                st.auto_save, st.adaptive_mode, st.fixed_interval_sec
-            )
-        }),
-    }
-}
-
-fn report_status(game: &Game<'_>) -> String {
-    let online: Vec<u128> = game
-        .lan
-        .as_ref()
-        .map(|h| {
-            h.hub
-                .guests
-                .iter()
-                .filter(|g| g.placed)
-                .map(|g| g.uuid)
-                .collect()
-        })
-        .unwrap_or_default();
-    let now = game.world.game_time;
-    with_state(|st| {
-        let anchors = resolve_anchors(&st.anchor, &online, now, None);
-        let cd_text = if st.anchor.rollback_cooldown_seconds <= 0 {
-            "disabled".to_owned()
-        } else {
-            let rem = st
-                .last_rollback_tick
-                .map(|last| {
-                    (i64::from(st.anchor.rollback_cooldown_seconds) * 20 - (now - last)).max(0) / 20
-                })
-                .unwrap_or(0);
-            format!(
-                "{} s (ready in {} s)",
-                st.anchor.rollback_cooldown_seconds, rem
-            )
-        };
-        format!(
-            "[RZero] Key player mode: {} | rollback cooldown: {} | active key players: {} | has_checkpoint: {}",
-            st.anchor.mode.id(),
-            cd_text,
-            anchors.len(),
-            st.has_checkpoint
-        )
-    })
-}
-
-fn capture_chunk_ticks(
-    chunks: &FxHashMap<(i32, i32), Arc<Chunk>>,
-    ticks: &horizon_world::level::Ticks,
-) -> HashMap<(i32, i32), (ChunkTicks, ChunkTicks)> {
-    let mut map = HashMap::with_capacity(chunks.len());
-    for &(cx, cz) in chunks.keys() {
-        let pos = ChunkPos::new(cx, cz);
-        let b = ticks.blocks.chunk(pos).cloned().unwrap_or_default();
-        let f = ticks.fluids.chunk(pos).cloned().unwrap_or_default();
-        map.insert((cx, cz), (b, f));
     }
     map
 }
 
-fn raids_dat_path(world_root: &Path, dim: Dim) -> PathBuf {
-    horizon_client::save::dimension_dir(world_root, dim.id()).join("data/minecraft/raids.dat")
-}
-
-fn fight_dat_path(world_root: &Path) -> PathBuf {
-    horizon_client::save::dimension_dir(world_root, "minecraft:the_end")
-        .join("data/minecraft/ender_dragon_fight.dat")
-}
-
-fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
-    let mut files = HashMap::new();
-    for sub in ["players/data", "players/stats", "players/advancements", "playerdata", "stats", "advancements"] {
-        let dir = world_root.join(sub);
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file()
-                && let Ok(bytes) = fs::read(&path)
-            {
-                files.insert(path, bytes);
-            }
-        }
-    }
-    files
-}
-
-fn restore_offline_files(saved: &HashMap<PathBuf, Vec<u8>>, restore_stats: bool) {
-    for (path, bytes) in saved {
-        if !restore_stats
-            && path
-                .parent()
-                .and_then(|p| p.file_name())
-                .is_some_and(|n| n == "stats")
-        {
-            continue;
-        }
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let _ = fs::write(path, bytes);
-    }
-}
-
-fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
+pub fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
     let raids_dat = fs::read(raids_dat_path(&game.world_root, dim)).ok();
     LevelSnapshot {
         chunks: game.world.chunks.clone(),
@@ -1297,7 +1013,7 @@ fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
     }
 }
 
-fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::Parked) -> LevelSnapshot {
+pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::super::Parked) -> LevelSnapshot {
     let raids_dat = fs::read(raids_dat_path(world_root, dim)).ok();
     LevelSnapshot {
         chunks: p.world.chunks.clone(),
@@ -1484,10 +1200,29 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         offline_player_data,
         levels,
     };
-    SNAPSHOT.with(|cell| *cell.borrow_mut() = Some(timeline));
+
+    set_snapshot(Some(timeline));
 }
 
-fn apply_level_snapshot_in_place(
+// ============================================================================
+// Submodule: restore.rs
+// ============================================================================
+
+
+pub fn restore_offline_files(saved: &HashMap<PathBuf, Vec<u8>>, restore_stats: bool) {
+    for (path, bytes) in saved {
+        let is_stat = path.to_string_lossy().contains("stats");
+        if is_stat && !restore_stats {
+            continue;
+        }
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(path, bytes);
+    }
+}
+
+pub fn apply_level_snapshot_in_place(
     game: &mut Game<'_>,
     dim: Dim,
     snap: &LevelSnapshot,
@@ -1679,7 +1414,7 @@ fn apply_level_snapshot_in_place(
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
-    let Some(snap) = SNAPSHOT.with(|cell| cell.borrow().clone()) else {
+    let Some(snap) = get_snapshot_clone() else {
         return false;
     };
     let policy = &snap.policy;
@@ -1968,296 +1703,636 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
     true
 }
 
-fn is_guest_safe(game: &Game<'_>, g: &horizon_client::lan::guest::Guest) -> bool {
-    if !g.placed || g.dead || g.health <= 1.0 {
-        return false;
-    }
-    if g.effects.list.iter().any(|e| e.id == "levitation") {
-        return false;
-    }
-    let (fire_ticks, fall_distance) = match g.motion.as_deref() {
-        Some(m) => (m.fire_ticks, m.fall_distance as f32),
-        None => (0, 0.0),
-    };
-    if fire_ticks > 0 {
-        return false;
-    }
-    let bx = g.position[0].floor() as i32;
-    let by = g.position[1].floor() as i32;
-    let bz = g.position[2].floor() as i32;
-    let facts = game.res.facts();
-    let here_fluid = facts.get(game.world.block(bx, by, bz)).fluid;
-    if here_fluid == Fluid::Lava {
-        return false;
-    }
-    let pos_vec = Vec3::new(g.position[0], g.position[1], g.position[2]);
-    let imminent_tnt = game
-        .tnts
-        .iter()
-        .any(|t| t.fuse <= 60 && t.position.distance_squared(pos_vec) <= 64.0);
-    let imminent_creeper = game.mobs.iter().any(|m| {
-        m.alive()
-            && m.species() == Species::Creeper
-            && (m.extra.counter > 0 || m.extra.flag)
-            && m.position.distance_squared(pos_vec) <= 49.0
-    });
-    if imminent_tnt || imminent_creeper {
-        return false;
-    }
-    if !g.on_ground && !g.flying && !g.creative() && !g.spectator() {
-        let min_y = game.dim.min_y();
-        let mut probe_y = by;
-        let mut found_ground = false;
-        let mut expected_damage = 0.0f32;
-        for _ in 0..256 {
-            probe_y -= 1;
-            if probe_y < min_y {
-                break;
-            }
-            let st = game.world.block(bx, probe_y, bz);
-            let f = facts.get(st);
-            if facts.is_air(st) && f.fluid == Fluid::None {
-                continue;
-            }
-            if f.fluid == Fluid::Lava {
-                return false;
-            }
-            found_ground = true;
-            if f.fluid == Fluid::None {
-                let total_fall = fall_distance + (g.position[1] as f32 - probe_y as f32);
-                expected_damage = total_fall - 3.0;
-            }
-            break;
+// ============================================================================
+// Submodule: commands.rs
+// ============================================================================
+
+
+pub fn execute_rzero_command(
+    game: &mut Game<'_>,
+    requester: Option<u128>,
+    command: &str,
+) -> Vec<String> {
+    let words: Vec<&str> = command.split_whitespace().collect();
+    let sub = words.get(1).copied().unwrap_or("status");
+    let reply = match sub {
+        "set" | "save" => {
+            create_checkpoint_on_server(game, requester);
+            "[RZero] Checkpoint created successfully.".to_owned()
         }
-        if !found_ground || expected_damage >= g.health {
-            return false;
-        }
-    }
-    true
-}
-
-fn pack_pos(x: i32, y: i32, z: i32) -> i64 {
-    ((x as i64 & 0x3FF_FFFF) << 38) | ((z as i64 & 0x3FF_FFFF) << 12) | (y as i64 & 0xFFF)
-}
-
-fn unpack_pos(packed: i64) -> (i32, i32, i32) {
-    let x = (packed >> 38) as i32;
-    let z = ((packed << 26) >> 38) as i32;
-    let y = ((packed << 52) >> 52) as i32;
-    (x, y, z)
-}
-
-fn flood_escape_space(
-    game: &Game<'_>,
-    start: [i32; 3],
-    blocked: Option<&HashSet<i64>>,
-    allow_drops: bool,
-) -> (usize, usize) {
-    const MAX_VISITED: usize = 200;
-    const MAX_DIST: i32 = 6;
-    const DX: [i32; 4] = [0, 0, -1, 1];
-    const DZ: [i32; 4] = [-1, 1, 0, 0];
-
-    let min_dy = if allow_drops { -3 } else { -2 };
-    let facts = game.res.facts();
-    let mut visited = HashSet::with_capacity(MAX_VISITED);
-    let mut queue = VecDeque::with_capacity(MAX_VISITED);
-    let start_long = pack_pos(start[0], start[1], start[2]);
-    visited.insert(start_long);
-    queue.push_back(start_long);
-    let mut cliffs = 0usize;
-
-    while let Some(curr) = queue.pop_front() {
-        if visited.len() >= MAX_VISITED {
-            break;
-        }
-        let (cx, cy, cz) = unpack_pos(curr);
-        for dir in 0..4 {
-            let nx = cx + DX[dir];
-            let nz = cz + DZ[dir];
-            let mut target = None;
-            let mut is_cliff = false;
-            for dy in (min_dy..=1).rev() {
-                let ny = cy + dy;
-                let st_f = facts.get(game.world.block(nx, ny, nz));
-                let fl_f = facts.get(game.world.block(nx, ny - 1, nz));
-                let state_blocks = st_f.full_collision || st_f.legacy_solid;
-                let floor_blocks = fl_f.full_collision || fl_f.legacy_solid;
-                let floor_fluid = fl_f.fluid != Fluid::None;
-                let floor_lava = fl_f.fluid == Fluid::Lava;
-                let standable = if allow_drops {
-                    floor_blocks || floor_fluid
-                } else {
-                    floor_blocks
-                };
-                if !state_blocks && standable {
-                    target = Some((nx, ny, nz));
-                    if allow_drops && (dy <= min_dy || floor_lava) {
-                        is_cliff = true;
-                    }
-                    break;
-                }
-            }
-            if is_cliff {
-                cliffs += 1;
-            }
-            let Some((tx, ty, tz)) = target else {
-                continue;
-            };
-            let t_long = pack_pos(tx, ty, tz);
-            if visited.contains(&t_long) {
-                continue;
-            }
-            if blocked.is_some_and(|b| b.contains(&t_long)) {
-                continue;
-            }
-            let dist = (tx - start[0]).abs() + (ty - start[1]).abs() + (tz - start[2]).abs();
-            if dist <= MAX_DIST {
-                visited.insert(t_long);
-                queue.push_back(t_long);
-            }
-        }
-    }
-    (visited.len(), cliffs)
-}
-
-fn calculate_guest_threat(game: &Game<'_>, g: &horizon_client::lan::guest::Guest) -> f64 {
-    if !is_guest_safe(game, g) {
-        return -1.0;
-    }
-    let hp_pct = (g.health / 20.0).clamp(0.0, 1.0);
-    let mut env_threat = f64::from(1.0 - hp_pct) * 60.0;
-    if g.food < 6 {
-        env_threat += 15.0;
-    }
-    let air = g.motion.as_deref().map_or(300, |m| m.air);
-    if air < 150 {
-        let air_pct = air as f32 / 300.0;
-        env_threat += f64::from(0.5 - air_pct) * 80.0;
-    }
-    if g.effects
-        .list
-        .iter()
-        .any(|e| matches!(e.id, "poison" | "wither"))
-    {
-        env_threat += 40.0;
-    }
-
-    let p_vec = Vec3::new(g.position[0], g.position[1], g.position[2]);
-    let mut mobs_tracking = 0;
-    let mut mobs_attacking = 0;
-    let mut mob_cells = HashSet::new();
-    for m in &game.mobs {
-        if !m.alive() || !m.hostile() {
-            continue;
-        }
-        let d2 = m.position.distance_squared(p_vec);
-        if d2 > 256.0 {
-            continue;
-        }
-        if m.ai.target.is_some() || d2 < 16.0 {
-            mobs_tracking += 1;
-            if d2 < 9.0 || m.ai.aggressive {
-                mobs_attacking += 1;
-            }
-            let mx = m.position.x.floor() as i32;
-            let my = m.position.y.floor() as i32;
-            let mz = m.position.z.floor() as i32;
-            mob_cells.insert(pack_pos(mx, my, mz));
-        }
-    }
-
-    let mob_threat = (f64::from(mobs_tracking) * 5.0 + f64::from(mobs_attacking) * 25.0).min(60.0);
-    if mob_threat == 0.0 {
-        env_threat *= 0.5;
-    }
-    let mut total_threat = (env_threat + mob_threat).min(100.0);
-    if mobs_tracking > 0 {
-        let start = [
-            g.position[0].floor() as i32,
-            g.position[1].floor() as i32,
-            g.position[2].floor() as i32,
-        ];
-        let (free_space, cliffs) = flood_escape_space(game, start, None, true);
-        let (safe_space, _) = flood_escape_space(game, start, Some(&mob_cells), false);
-        if free_space > 0 {
-            let cornered = 1.0 - (safe_space as f64 / free_space as f64);
-            total_threat = (total_threat + cornered * 15.0 + (cliffs.min(4) as f64) * 2.5).min(100.0);
-        }
-    }
-    total_threat
-}
-
-fn tick_autosave_on_server(game: &mut Game<'_>) {
-    let now = game.world.game_time;
-
-    let boss_just_died = game.dragon.as_ref().is_some_and(|d| d.death_time == 1)
-        || game.mobs.iter().any(|m| {
-            m.species() == Species::Wither && !m.alive() && m.death_time == 1
-        });
-    if boss_just_died {
-        let should_boss_save = with_state_mut(|st| {
-            if st.save_on_boss_defeat && now - st.last_boss_death_tick > 100 {
-                st.last_boss_death_tick = now;
-                true
+        "load" | "rollback" => {
+            if rollback_checkpoint_on_server(game) {
+                format!(
+                    "[RZero] Timeline rolled back to checkpoint (tick={}).",
+                    game.world.game_time
+                )
             } else {
-                false
-            }
-        });
-        if should_boss_save {
-            let safe = game
-                .lan
-                .as_ref()
-                .is_some_and(|h| h.hub.guests.iter().any(|g| is_guest_safe(game, g)));
-            if safe {
-                create_checkpoint_on_server(game, None);
-                if with_state(|st| st.logs) {
-                    game.system_message(Text::literal(
-                        "[RZero] Boss defeat checkpoint created.",
-                    ));
-                }
-                return;
+                "[RZero] Rollback aborted: No timeline origin found.".to_owned()
             }
         }
-    }
-
-    let (auto_save, adaptive_mode) = with_state(|st| (st.auto_save, st.adaptive_mode));
-    if !auto_save {
-        return;
-    }
-
-    if !adaptive_mode {
-        let due = with_state(|st| now - st.last_save_tick >= st.current_interval_ticks.max(100));
-        if !due {
-            return;
-        }
-        let any_safe = game
-            .lan
-            .as_ref()
-            .is_some_and(|h| h.hub.guests.iter().any(|g| is_guest_safe(game, g)));
-        if any_safe {
-            create_checkpoint_on_server(game, None);
-            with_state_mut(|st| {
-                st.current_interval_ticks = if st.use_random_interval {
-                    let min = st.random_min_sec.max(5);
-                    let max = st.random_max_sec.max(min + 1);
-                    let mut rng = LegacyRandom::new(now);
-                    let extra = rng.next_int_bound((max - min) + 1).unwrap_or(0);
-                    i64::from(min + extra) * 20
-                } else {
-                    i64::from(st.fixed_interval_sec.max(5)) * 20
-                };
-            });
-            if with_state(|st| st.logs) {
-                game.system_message(Text::literal("[RZero] Auto-saved checkpoint."));
-            }
-        }
-        return;
-    }
-
-    let Some(host) = &game.lan else {
-        return;
+        "status" => report_status(game),
+        "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
+        "autosave" => handle_autosave_subcommand(game, &words[2..]),
+        _ => "[RZero] Usage: /rzero <set|load|status|anchor|autosave>".to_owned(),
     };
+    vec![reply]
+}
+
+pub fn handle_anchor_subcommand(
+    game: &mut Game<'_>,
+    args: &[&str],
+    requester: Option<u128>,
+) -> String {
+    match args.first().copied().unwrap_or("status") {
+        "cooldown" => {
+            let seconds = args
+                .get(1)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0)
+                .max(0);
+            with_state_mut(|st| {
+                st.anchor.rollback_cooldown_seconds = seconds;
+                st.last_rollback_tick = None;
+            });
+            save_current_settings(game);
+            if seconds <= 0 {
+                "[RZero] Rollback cooldown disabled: every key player death rewinds the world."
+                    .to_owned()
+            } else {
+                format!("[RZero] Rollback cooldown: {seconds} (in seconds)")
+            }
+        }
+        "mode" => {
+            let mode = AnchorMode::by_id(args.get(1).copied().unwrap_or("fixed"));
+            let rot = args
+                .get(2)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(300)
+                .max(5);
+            with_state_mut(|st| {
+                st.anchor.mode = mode;
+                if mode == AnchorMode::Rotating {
+                    st.anchor.rotation_seconds = rot;
+                }
+                if matches!(mode, AnchorMode::Fixed | AnchorMode::Multi)
+                    && let Some(req) = requester
+                {
+                    st.anchor.pinned = vec![req];
+                }
+            });
+            save_current_settings(game);
+            format!("[RZero] Key player mode: {}", mode.id())
+        }
+        _ => report_status(game),
+    }
+}
+
+pub fn handle_autosave_subcommand(game: &mut Game<'_>, args: &[&str]) -> String {
+    match args.first().copied().unwrap_or("status") {
+        "on" | "interval" => {
+            let sec = args.get(1).and_then(|s| s.parse::<i32>().ok());
+            with_state_mut(|st| {
+                st.auto_save = true;
+                st.adaptive_mode = false;
+                if let Some(s) = sec {
+                    st.fixed_interval_sec = s.max(5);
+                }
+                st.current_interval_ticks = i64::from(st.fixed_interval_sec) * 20;
+            });
+            save_current_settings(game);
+            "[RZero] Interval auto-save enabled.".to_owned()
+        }
+        "adaptive" => {
+            let sec = args.get(1).and_then(|s| s.parse::<i32>().ok());
+            with_state_mut(|st| {
+                st.auto_save = true;
+                st.adaptive_mode = true;
+                if let Some(s) = sec {
+                    st.adaptive_interval_sec = s.max(60);
+                }
+            });
+            save_current_settings(game);
+            "[RZero] Adaptive auto-save enabled.".to_owned()
+        }
+        "off" => {
+            with_state_mut(|st| st.auto_save = false);
+            save_current_settings(game);
+            "[RZero] Auto-save disabled.".to_owned()
+        }
+        _ => with_state(|st| {
+            format!(
+                "[RZero] Auto-save: {} | adaptive: {} | interval: {}s",
+                st.auto_save, st.adaptive_mode, st.fixed_interval_sec
+            )
+        }),
+    }
+}
+
+pub fn report_status(game: &Game<'_>) -> String {
+    let online: Vec<u128> = game
+        .lan
+        .as_ref()
+        .map(|h| {
+            h.hub
+                .guests
+                .iter()
+                .filter(|g| g.placed)
+                .map(|g| g.uuid)
+                .collect()
+        })
+        .unwrap_or_default();
+    let now = game.world.game_time;
+    with_state(|st| {
+        let anchors = resolve_anchors(&st.anchor, &online, now, None);
+        let cd_text = if st.anchor.rollback_cooldown_seconds <= 0 {
+            "disabled".to_owned()
+        } else {
+            let rem = st
+                .last_rollback_tick
+                .map(|last| {
+                    (i64::from(st.anchor.rollback_cooldown_seconds) * 20 - (now - last)).max(0) / 20
+                })
+                .unwrap_or(0);
+            format!(
+                "{} s (ready in {} s)",
+                st.anchor.rollback_cooldown_seconds, rem
+            )
+        };
+        format!(
+            "[RZero] Key player mode: {} | rollback cooldown: {} | active key players: {} | has_checkpoint: {}",
+            st.anchor.mode.id(),
+            cd_text,
+            anchors.len(),
+            st.has_checkpoint
+        )
+    })
+}
+
+pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool) {
+    if !game.native_on(MOD_ID) {
+        return;
+    }
+    let trimmed = command.trim().trim_start_matches('/');
+    if !trimmed.starts_with("rzero") && trimmed != "rzero" {
+        return;
+    }
+    if let Some(first) = trimmed.split_whitespace().next()
+        && first != "rzero"
+    {
+        return;
+    }
+    *ran = true;
+    let cmd_owned = trimmed.to_owned();
+    if let Some(server) = &game.integrated {
+        if let Some(lines) = server.call(move |srv| execute_rzero_command(srv, None, &cmd_owned)) {
+            for line in lines {
+                game.native_chat(&line);
+            }
+        }
+    } else {
+        for line in execute_rzero_command(game, None, &cmd_owned) {
+            game.native_chat(&line);
+        }
+    }
+}
+
+pub fn intercept_owner_console_command(
+    game: &mut Game<'_>,
+    command: &str,
+) -> ControlFlow<Vec<String>> {
+    if !game.native_on(MOD_ID) {
+        return ControlFlow::Continue(());
+    }
+    let trimmed = command.trim().trim_start_matches('/');
+    if trimmed.split_whitespace().next() != Some("rzero") {
+        return ControlFlow::Continue(());
+    }
+    let owner = game.serving.as_ref().map(|s| s.owner);
+    let lines = execute_rzero_command(game, owner, trimmed);
+    if let Some(host) = &game.lan
+        && let Some(owner_uuid) = owner
+        && let Some(g) = host.hub.guests.iter().find(|g| g.uuid == owner_uuid)
+    {
+        for line in &lines {
+            g.send(&C::SystemChat(play::SystemChat {
+                content: literal(line),
+                overlay: false,
+            }));
+        }
+    }
+    ControlFlow::Break(lines)
+}
+
+pub fn intercept_guest_command(
+    game: &mut Game<'_>,
+    host: &mut LanHost,
+    conn: u32,
+    command: &str,
+) -> ControlFlow<()> {
+    if !game.native_on(MOD_ID) {
+        return ControlFlow::Continue(());
+    }
+    let trimmed = command.trim().trim_start_matches('/');
+    if trimmed.split_whitespace().next() != Some("rzero") {
+        return ControlFlow::Continue(());
+    }
+    let requester = host.hub.guest(conn).map(|g| g.uuid);
+    game.lan = Some(std::mem::replace(host, empty_lan_placeholder()));
+    let lines = execute_rzero_command(game, requester, trimmed);
+    if let Some(restored_host) = game.lan.take() {
+        *host = restored_host;
+    }
+    for line in lines {
+        host.hub.send_to(
+            conn,
+            &C::SystemChat(play::SystemChat {
+                content: literal(&line),
+                overlay: false,
+            }),
+        );
+    }
+    ControlFlow::Break(())
+}
+
+pub fn empty_lan_placeholder() -> LanHost {
+    unreachable!("game.lan is always restored")
+}
+
+// ============================================================================
+// Submodule: ui.rs
+// ============================================================================
+
+
+pub fn register_native_mod(mods: &mut Vec<NativeMod>) {
+    mods.push(NativeMod {
+        id: MOD_ID.to_owned(),
+        title: "RZero 0.1.0".to_owned(),
+        description:
+            "Return by Death. Completely rewind the timeline and the world state to your last checkpoint upon death."
+                .to_owned(),
+        keys: vec![
+            [
+                "save".to_owned(),
+                "Create Checkpoint".to_owned(),
+                "key.keyboard.f6".to_owned(),
+            ],
+            [
+                "load".to_owned(),
+                "Return to Checkpoint".to_owned(),
+                "key.keyboard.f7".to_owned(),
+            ],
+            [
+                "anchor_menu".to_owned(),
+                "Cycle Key Player Mode".to_owned(),
+                "key.keyboard.f8".to_owned(),
+            ],
+        ],
+    });
+}
+
+pub fn populate_settings(game: &mut Game<'_>, mod_id: &str, buttons: &mut Vec<String>) {
+    if mod_id != MOD_ID {
+        return;
+    }
+    load_saved_settings(game);
+    with_state(|st| {
+        buttons.push(format!(
+            "Auto-Save: {}",
+            if st.auto_save { "ON" } else { "OFF" }
+        ));
+        buttons.push(format!(
+            "Adaptive Save: {}",
+            if st.adaptive_mode { "ON" } else { "OFF" }
+        ));
+        buttons.push(format!("Auto-Save Interval: {} s", st.fixed_interval_sec));
+        buttons.push(format!("Key Player Mode: {}", st.anchor.mode.id()));
+        let cd = st.anchor.rollback_cooldown_seconds;
+        buttons.push(if cd <= 0 {
+            "Rollback Cooldown: Off".to_owned()
+        } else {
+            format!("Rollback Cooldown: {cd} s")
+        });
+        buttons.push(format!(
+            "Checkpoint on Boss Defeat: {}",
+            if st.save_on_boss_defeat { "ON" } else { "OFF" }
+        ));
+        buttons.push(format!("Logs: {}", if st.logs { "ON" } else { "OFF" }));
+    });
+}
+
+pub fn handle_settings_click(game: &mut Game<'_>, mod_id: &str, button: usize) {
+    if mod_id != MOD_ID {
+        return;
+    }
+    with_state_mut(|st| match button {
+        0 => st.auto_save = !st.auto_save,
+        1 => st.adaptive_mode = !st.adaptive_mode,
+        2 => {
+            st.fixed_interval_sec = match st.fixed_interval_sec {
+                60 => 180,
+                180 => 300,
+                300 => 600,
+                600 => 1200,
+                _ => 60,
+            };
+            st.current_interval_ticks = i64::from(st.fixed_interval_sec) * 20;
+        }
+        3 => st.anchor.mode = st.anchor.mode.next(),
+        4 => {
+            st.anchor.rollback_cooldown_seconds = match st.anchor.rollback_cooldown_seconds {
+                0 => 10,
+                10 => 30,
+                30 => 60,
+                60 => 300,
+                _ => 0,
+            };
+            st.last_rollback_tick = None;
+        }
+        5 => st.save_on_boss_defeat = !st.save_on_boss_defeat,
+        6 => st.logs = !st.logs,
+        _ => {}
+    });
+    save_current_settings(game);
+}
+
+pub fn load_saved_settings(game: &Game<'_>) {
+    let auto_save = game
+        .native_setting(MOD_ID, "auto_save")
+        .map(|v| v != "false");
+    let adaptive = game
+        .native_setting(MOD_ID, "adaptive_mode")
+        .map(|v| v == "true");
+    let interval = game
+        .native_setting(MOD_ID, "fixed_interval_sec")
+        .and_then(|v| v.parse::<i32>().ok());
+    let mode = game
+        .native_setting(MOD_ID, "anchor_mode")
+        .map(|v| AnchorMode::by_id(&v));
+    let cooldown = game
+        .native_setting(MOD_ID, "rollback_cooldown_sec")
+        .and_then(|v| v.parse::<i32>().ok());
+    let boss_save = game
+        .native_setting(MOD_ID, "save_on_boss_defeat")
+        .map(|v| v != "false");
+    let logs = game.native_setting(MOD_ID, "logs").map(|v| v == "true");
+
+    let json_cfg = fs::read_to_string(Path::new("config").join("rzero.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+
+    with_state_mut(|st| {
+        if let Some(v) = &json_cfg {
+            let b = |val: &serde_json::Value, d: bool| val.as_bool().unwrap_or(d);
+            let rb = &v["checkpointPolicy"]["rollback"];
+            if rb.is_object() {
+                st.policy.blocks = b(&rb["blocks"], true);
+                st.policy.biomes = b(&rb["biomes"], true);
+                st.policy.block_entities = b(&rb["block_entities"], true);
+                st.policy.block_ticks = b(&rb["block_ticks"], true);
+                st.policy.fluid_ticks = b(&rb["fluid_ticks"], true);
+                st.policy.block_events = b(&rb["block_events"], true);
+                let ent = &rb["entities"];
+                if ent.is_object() {
+                    st.policy.entities_presence = b(&ent["presence"], true);
+                    st.policy.dropped_items = b(&ent["dropped_items"], true);
+                    st.policy.experience_orbs = b(&ent["experience_orbs"], true);
+                }
+                let pl = &rb["players"];
+                if pl.is_object() {
+                    st.policy.player_position = b(&pl["position"], true);
+                    st.policy.player_motion = b(&pl["motion"], true);
+                    st.policy.player_health = b(&pl["health"], true);
+                    st.policy.player_hunger = b(&pl["hunger"], true);
+                    st.policy.player_experience = b(&pl["experience"], true);
+                    st.policy.player_inventory = b(&pl["inventory"], true);
+                    st.policy.player_ender_chest = b(&pl["ender_chest"], true);
+                    st.policy.player_potion_effects = b(&pl["potion_effects"], true);
+                    st.policy.player_cooldowns = b(&pl["cooldowns"], true);
+                    st.policy.player_abilities = b(&pl["abilities"], true);
+                    st.policy.player_recipe_book = b(&pl["recipe_book"], true);
+                    st.policy.player_spawn_point = b(&pl["spawn_point"], true);
+                    st.policy.player_stats = b(&pl["stats"], true);
+                    st.policy.preserve_new_player_inventory =
+                        b(&pl["preserve_new_player_inventory"], false);
+                }
+                let w = &rb["world"];
+                if w.is_object() {
+                    st.policy.world_time = b(&w["time"], true);
+                    st.policy.world_weather = b(&w["weather"], true);
+                    st.policy.world_raids = b(&w["raids"], true);
+                    st.policy.world_dragon_fight = b(&w["dragon_fight"], true);
+                    st.policy.world_scoreboard = b(&w["scoreboard"], true);
+                    st.policy.world_level_rng = b(&w["level_rng"], true);
+                    st.policy.world_difficulty = b(&w["difficulty"], true);
+                    st.policy.world_spawn = b(&w["world_spawn"], true);
+                    let sg = &w["server_globals"];
+                    if sg.is_object() {
+                        st.policy.server_bossbars = b(&sg["bossbars"], true);
+                        st.policy.server_forced_chunks = b(&sg["forced_chunks"], true);
+                        st.policy.server_world_border = b(&sg["world_border"], true);
+                        st.policy.server_game_rules = b(&sg["game_rules"], true);
+                    }
+                }
+            }
+            let ad = &v["adaptive"];
+            if ad.is_object() {
+                if let Some(gap) = ad["min_save_gap_seconds"].as_i64() {
+                    st.min_save_gap_sec = (gap as i32).max(5);
+                }
+                if let Some(rel) = ad["relax_time_seconds"].as_i64() {
+                    st.relax_time_sec = (rel as i32).max(1);
+                }
+                if let Some(pct) = ad["post_combat_save_percent"].as_i64() {
+                    st.post_combat_save_pct = (pct as i32).clamp(0, 100);
+                }
+                st.save_on_boss_defeat = b(&ad["save_on_boss_defeat"], st.save_on_boss_defeat);
+            }
+        }
+        if let Some(v) = auto_save {
+            st.auto_save = v;
+        }
+        if let Some(v) = adaptive {
+            st.adaptive_mode = v;
+        }
+        if let Some(v) = interval {
+            st.fixed_interval_sec = v.max(5);
+            st.current_interval_ticks = i64::from(st.fixed_interval_sec) * 20;
+        }
+        if let Some(v) = mode {
+            st.anchor.mode = v;
+        }
+        if let Some(v) = cooldown {
+            st.anchor.rollback_cooldown_seconds = v.max(0);
+        }
+        if let Some(v) = boss_save {
+            st.save_on_boss_defeat = v;
+        }
+        if let Some(v) = logs {
+            st.logs = v;
+        }
+    });
+}
+
+pub fn save_current_settings(game: &Game<'_>) {
+    with_state(|st| {
+        game.native_set_setting(
+            MOD_ID,
+            "auto_save",
+            if st.auto_save { "true" } else { "false" },
+        );
+        game.native_set_setting(
+            MOD_ID,
+            "adaptive_mode",
+            if st.adaptive_mode { "true" } else { "false" },
+        );
+        game.native_set_setting(
+            MOD_ID,
+            "fixed_interval_sec",
+            &st.fixed_interval_sec.to_string(),
+        );
+        game.native_set_setting(MOD_ID, "anchor_mode", st.anchor.mode.id());
+        game.native_set_setting(
+            MOD_ID,
+            "rollback_cooldown_sec",
+            &st.anchor.rollback_cooldown_seconds.to_string(),
+        );
+        game.native_set_setting(
+            MOD_ID,
+            "save_on_boss_defeat",
+            if st.save_on_boss_defeat {
+                "true"
+            } else {
+                "false"
+            },
+        );
+        game.native_set_setting(MOD_ID, "logs", if st.logs { "true" } else { "false" });
+    });
+}
+
+// ============================================================================
+// Submodule: hooks.rs
+// ============================================================================
+
+
+pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
+    if !pressed || !game.native_on(MOD_ID) || !game.native_playing() {
+        return;
+    }
+    let save_key = game.native_mod_key(MOD_ID, "save", "key.keyboard.f6");
+    let load_key = game.native_mod_key(MOD_ID, "load", "key.keyboard.f7");
+    let mode_key = game.native_mod_key(MOD_ID, "anchor_menu", "key.keyboard.f8");
+
+    if key == save_key {
+        if let Some(server) = &game.integrated {
+            let msg = server.call(|srv| {
+                create_checkpoint_on_server(srv, None);
+                "[RZero] Checkpoint created successfully.".to_owned()
+            });
+            if let Some(text) = msg {
+                game.native_chat(&text);
+            }
+        } else {
+            with_state_mut(|st| st.pending_save_request = true);
+        }
+    } else if key == load_key {
+        if let Some(server) = &game.integrated {
+            let msg = server.call(|srv| {
+                if rollback_checkpoint_on_server(srv) {
+                    format!(
+                        "[RZero] Timeline rolled back to checkpoint (tick={}).",
+                        srv.world.game_time
+                    )
+                } else {
+                    "[RZero] Rollback aborted: No timeline origin found.".to_owned()
+                }
+            });
+            if let Some(text) = msg {
+                game.native_chat(&text);
+            }
+        } else {
+            with_state_mut(|st| st.pending_load_request = true);
+        }
+    } else if key == mode_key {
+        let next_mode = with_state_mut(|st| {
+            st.anchor.mode = st.anchor.mode.next();
+            st.anchor.mode
+        });
+        save_current_settings(game);
+        game.native_chat(&format!("[RZero] Key player mode: {}", next_mode.id()));
+    }
+}
+
+pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
+    match phase {
+        WorldPhase::WorldOpenReady => {
+            load_saved_settings(game);
+            clear_snapshot();
+            with_state_mut(|st| {
+                st.has_checkpoint = false;
+                st.anchor_ids.clear();
+                st.pending_death_rollback = None;
+                st.last_save_tick = game.world.game_time;
+                st.current_interval_ticks = i64::from(st.fixed_interval_sec.max(5)) * 20;
+                st.last_rollback_tick = None;
+                st.last_boss_death_tick = -9999;
+                st.current_intensity = 0.0;
+                st.peak_intensity = 0.0;
+                st.relax_ticks = 0;
+            });
+        }
+        WorldPhase::WorldCloseFinal
+        | WorldPhase::WorldCloseFailed
+        | WorldPhase::WorldOpenFailed => {
+            clear_snapshot();
+            with_state_mut(|st| {
+                st.has_checkpoint = false;
+                st.anchor_ids.clear();
+                st.pending_death_rollback = None;
+            });
+        }
+    }
+}
+
+pub fn handle_tick(game: &mut Game<'_>) {
+    if !game.native_on(MOD_ID) {
+        return;
+    }
+    if game.native_window() {
+        return;
+    }
+
+    let (do_save, do_load, dead_rollback) = with_state_mut(|st| {
+        (
+            std::mem::replace(&mut st.pending_save_request, false),
+            std::mem::replace(&mut st.pending_load_request, false),
+            st.pending_death_rollback.take(),
+        )
+    });
+
+    if do_save {
+        create_checkpoint_on_server(game, None);
+    }
+    if do_load || dead_rollback.is_some() {
+        rollback_checkpoint_on_server(game);
+        return;
+    }
+
+    tick_autosave_on_server(game);
+}
+
+pub fn intercept_guest_die(
+    game: &mut Game<'_>,
+    host: &mut LanHost,
+    gi: usize,
+    _conn: u32,
+) -> ControlFlow<()> {
+    if !game.native_on(MOD_ID) {
+        return ControlFlow::Continue(());
+    }
+    if host.hub.guests[gi].health > 0.0 || host.hub.guests[gi].dead {
+        return ControlFlow::Continue(());
+    }
+    let player_uuid = host.hub.guests[gi].uuid;
     let online: Vec<u128> = host
         .hub
         .guests
@@ -2265,76 +2340,42 @@ fn tick_autosave_on_server(game: &mut Game<'_>) {
         .filter(|g| g.placed)
         .map(|g| g.uuid)
         .collect();
-    let anchors = with_state(|st| resolve_anchors(&st.anchor, &online, now, None));
-    let mut max_threat = 0.0f64;
-    let mut any_anchor_here = false;
-    for g in host
-        .hub
-        .guests
-        .iter()
-        .filter(|g| g.placed && anchors.contains(&g.uuid) && g.dimension == game.dim.id())
-    {
-        any_anchor_here = true;
-        let threat = calculate_guest_threat(game, g);
-        if threat < 0.0 {
-            with_state_mut(|st| st.relax_ticks = 0);
-            return;
-        }
-        if threat > max_threat {
-            max_threat = threat;
-        }
-    }
-    if !any_anchor_here {
-        return;
-    }
+    let now = game.world.game_time;
 
-    let mut rng = LegacyRandom::new(now ^ 0x5DEECE66D);
-    let rand_f = rng.next_float();
-    let should_save = with_state_mut(|st| {
-        let since_last = now - st.last_save_tick;
-        if max_threat > st.current_intensity {
-            st.current_intensity += (max_threat - st.current_intensity) * 0.2;
-            st.relax_ticks = 0;
-        } else {
-            st.current_intensity -= (st.current_intensity - max_threat) * 0.02;
+    let should_intercept = with_state_mut(|st| {
+        if !st.has_checkpoint {
+            return false;
         }
-        if st.current_intensity > st.peak_intensity {
-            st.peak_intensity = st.current_intensity;
+        let active_anchors = resolve_anchors(&st.anchor, &online, now, None);
+        let is_anchor =
+            active_anchors.contains(&player_uuid) || st.anchor_ids.contains(&player_uuid);
+        if !is_anchor {
+            return false;
         }
-
-        let relax_req = (st.relax_time_sec * 20).max(20);
-        let min_gap = (i64::from(st.min_save_gap_sec) * 20).max(100);
-        let chance = st.post_combat_save_pct as f32 / 100.0;
-
-        let mut trigger = false;
-        if st.peak_intensity > 35.0 {
-            if st.current_intensity < st.peak_intensity * 0.5 && max_threat <= 20.0 {
-                st.relax_ticks += 1;
-                if st.relax_ticks > relax_req {
-                    if rand_f < chance {
-                        trigger = true;
-                    } else {
-                        st.peak_intensity = 0.0;
-                        st.current_intensity = 0.0;
-                        st.relax_ticks = 0;
-                    }
-                }
-            } else {
-                st.relax_ticks = 0;
-            }
-        } else {
-            let tranquil_ticks = i64::from(st.adaptive_interval_sec.max(60)) * 20;
-            if since_last >= tranquil_ticks && max_threat <= 10.0 {
-                trigger = true;
-            }
+        let cd = st.anchor.rollback_cooldown_seconds;
+        if cd > 0
+            && let Some(last) = st.last_rollback_tick
+            && now >= last
+            && now - last < i64::from(cd) * 20
+        {
+            return false;
         }
-        trigger && since_last > min_gap
+        st.last_rollback_tick = Some(now);
+        st.pending_death_rollback = Some(player_uuid);
+        true
     });
 
-    if should_save {
-        create_checkpoint_on_server(game, None);
-        if with_state(|st| st.logs) {
-            game.system_message(Text::literal("[RZero] Adaptive checkpoint created."));
-        }
+    if !should_intercept {
+        return ControlFlow::Continue(());
     }
+
+    let g = &mut host.hub.guests[gi];
+    g.health = 20.0;
+    g.dead = false;
+    g.death_time = 0;
+    g.sent_health = None;
+    if let Some(m) = g.motion.as_mut() {
+        let _ = m.set_health(20.0, false);
+    }
+    ControlFlow::Break(())
 }
