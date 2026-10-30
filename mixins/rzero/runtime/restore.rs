@@ -337,12 +337,69 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 
     restore_offline_files(&snap.offline_player_data, policy.player_stats);
 
-    let start_dim = game.dim;
+    game.streaming.wait(std::time::Duration::from_millis(200));
+    let _ = game.save.flush();
+
+    let subfolders = ["region", "entities", "poi"];
+    let dims = [
+        "dimensions/minecraft/overworld",
+        "dimensions/minecraft/the_nether",
+        "dimensions/minecraft/the_end",
+    ];
+    for dim_path in dims {
+        for sub in subfolders {
+            let rdir = game.world_root.join(dim_path).join(sub);
+            if let Ok(entries) = fs::read_dir(rdir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.is_file() && !snap.region_files.contains(&p) {
+                        let _ = fs::remove_file(&p);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
+        &game.res,
+        &game.pack,
+        &game.options,
+        &game.settings,
+        &game.world_root,
+        game.dim,
+        game.level.seed,
+    ) {
+        game.streaming = fresh_streaming;
+        game.save = fresh_save;
+    } else {
+        game.save = Arc::new(horizon_client::save::SaveDir::new(
+            game.save.root.clone(),
+            game.save.shape,
+        ));
+    }
+
+    let target_dim = snap
+        .guests
+        .values()
+        .next()
+        .map(|g| Dim::from_id(&g.dimension))
+        .unwrap_or_else(|| {
+            snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
+        });
+
+    if game.dim != target_dim {
+        let _ = game.enter_level(None, target_dim);
+    }
+
+    // If Nether or End was opened after the checkpoint, drop it from parked memory
+    let saved_dims: HashSet<Dim> = snap.levels.keys().copied().collect();
+    game.levels.parked.retain(|dim, _| saved_dims.contains(dim));
+
     let other_dims: Vec<Dim> = snap
         .levels
         .keys()
         .copied()
-        .filter(|&d| d != start_dim)
+        .filter(|&d| d != target_dim)
         .collect();
 
     for dim in other_dims {
@@ -352,12 +409,12 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
             }
         }
     }
-    if game.dim != start_dim {
-        let _ = game.enter_level(None, start_dim);
+    if game.dim != target_dim {
+        let _ = game.enter_level(None, target_dim);
     }
 
-    if let Some(level_snap) = snap.levels.get(&start_dim) {
-        apply_level_snapshot_in_place(game, start_dim, level_snap, policy);
+    if let Some(level_snap) = snap.levels.get(&target_dim) {
+        apply_level_snapshot_in_place(game, target_dim, level_snap, policy);
     }
 
     if let Some(mut host) = game.lan.take() {

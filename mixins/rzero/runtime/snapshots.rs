@@ -245,6 +245,7 @@ pub struct TimelineSnapshot {
     pub dragon_fight_dat: Option<Vec<u8>>,
     pub trader_dat: Option<Vec<u8>>,
     pub rand_sequences: horizon_client::random_sequences::RandomSequences,
+    pub region_files: HashSet<PathBuf>,
     pub difficulty: u8,
     pub difficulty_locked: bool,
     pub world_spawn: Option<[i32; 3]>,

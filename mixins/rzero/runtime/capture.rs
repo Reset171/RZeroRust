@@ -271,6 +271,27 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
     let trader_dat = fs::read(trader_dat_path(&game.world_root)).ok();
     let offline_player_data = backup_offline_files(&game.world_root);
 
+    let mut region_files = HashSet::new();
+    let subfolders = ["region", "entities", "poi"];
+    let dims = [
+        "dimensions/minecraft/overworld",
+        "dimensions/minecraft/the_nether",
+        "dimensions/minecraft/the_end",
+    ];
+    for dim_path in dims {
+        for sub in subfolders {
+            let rdir = game.world_root.join(dim_path).join(sub);
+            if let Ok(entries) = fs::read_dir(rdir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.is_file() {
+                        region_files.insert(p);
+                    }
+                }
+            }
+        }
+    }
+
     let timeline = TimelineSnapshot {
         anchor_ids: anchor_set,
         policy,
@@ -286,6 +307,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         dragon_fight_dat,
         trader_dat,
         rand_sequences: game.rand_sequences.clone(),
+        region_files,
         difficulty: game.ui.difficulty,
         difficulty_locked: game.level.difficulty_locked,
         world_spawn: game.level.world_spawn,
