@@ -474,6 +474,7 @@ pub struct GuestSnapshot {
     pub exhaustion: f32,
     pub fire_ticks: i32,
     pub air: i32,
+    pub ticks_frozen: i32,
     pub fall_distance: f64,
     pub xp_level: i32,
     pub xp_progress: f32,
@@ -1093,7 +1094,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         for g in host.hub.guests.iter().filter(|g| g.placed) {
             online.push(g.uuid);
             let motion = g.motion.as_deref();
-            let (velocity, absorption, exhaustion, fire_ticks, air, fall_distance) = match motion {
+            let (velocity, absorption, exhaustion, fire_ticks, air, fall_distance, ticks_frozen) = match motion {
                 Some(m) => (
                     m.velocity,
                     m.health.absorption(),
@@ -1101,6 +1102,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                     m.fire_ticks,
                     m.air,
                     m.fall_distance,
+                    m.ticks_frozen,
                 ),
                 None => {
                     let body = g.loaded_body.unwrap_or(SavedBody {
@@ -1115,6 +1117,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                         body.fire_ticks,
                         body.air,
                         body.fall_distance,
+                        0,
                     )
                 }
             };
@@ -1157,6 +1160,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                     exhaustion,
                     fire_ticks,
                     air,
+                    ticks_frozen,
                     fall_distance,
                     xp_level: g.xp_level,
                     xp_progress: g.xp_progress,
@@ -1790,6 +1794,7 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                     if policy.player_health {
                         m.fire_ticks = gs.fire_ticks;
                         m.air = gs.air;
+                        m.ticks_frozen = gs.ticks_frozen;
                         let _ = m.set_health(gs.health.max(1.0), false);
                         let _ = m.internal_set_absorption(gs.absorption);
                         m.health.hurt_animation_time = 0;
@@ -1855,6 +1860,12 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
             game.run_level_teleports(&mut host);
         }
         game.lan = Some(host);
+    }
+
+    if let Some(p) = game.player.as_mut() {
+        if let Some(gs) = snap.guests.values().next() {
+            p.ticks_frozen = gs.ticks_frozen;
+        }
     }
 
     if policy.server_bossbars {

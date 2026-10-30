@@ -167,6 +167,7 @@ pub struct GuestSnapshot {
     pub exhaustion: f32,
     pub fire_ticks: i32,
     pub air: i32,
+    pub ticks_frozen: i32,
     pub fall_distance: f64,
     pub xp_level: i32,
     pub xp_progress: f32,

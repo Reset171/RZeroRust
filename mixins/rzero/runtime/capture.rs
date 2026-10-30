@@ -154,7 +154,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         for g in host.hub.guests.iter().filter(|g| g.placed) {
             online.push(g.uuid);
             let motion = g.motion.as_deref();
-            let (velocity, absorption, exhaustion, fire_ticks, air, fall_distance) = match motion {
+            let (velocity, absorption, exhaustion, fire_ticks, air, fall_distance, ticks_frozen) = match motion {
                 Some(m) => (
                     m.velocity,
                     m.health.absorption(),
@@ -162,6 +162,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                     m.fire_ticks,
                     m.air,
                     m.fall_distance,
+                    m.ticks_frozen,
                 ),
                 None => {
                     let body = g.loaded_body.unwrap_or(SavedBody {
@@ -176,6 +177,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                         body.fire_ticks,
                         body.air,
                         body.fall_distance,
+                        0,
                     )
                 }
             };
@@ -218,6 +220,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                     exhaustion,
                     fire_ticks,
                     air,
+                    ticks_frozen,
                     fall_distance,
                     xp_level: g.xp_level,
                     xp_progress: g.xp_progress,

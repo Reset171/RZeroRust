@@ -549,6 +549,7 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                     if policy.player_health {
                         m.fire_ticks = gs.fire_ticks;
                         m.air = gs.air;
+                        m.ticks_frozen = gs.ticks_frozen;
                         let _ = m.set_health(gs.health.max(1.0), false);
                         let _ = m.internal_set_absorption(gs.absorption);
                         m.health.hurt_animation_time = 0;
@@ -614,6 +615,12 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
             game.run_level_teleports(&mut host);
         }
         game.lan = Some(host);
+    }
+
+    if let Some(p) = game.player.as_mut() {
+        if let Some(gs) = snap.guests.values().next() {
+            p.ticks_frozen = gs.ticks_frozen;
+        }
     }
 
     if policy.server_bossbars {
