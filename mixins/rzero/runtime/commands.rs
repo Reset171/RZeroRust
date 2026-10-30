@@ -183,6 +183,14 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
         return;
     }
     *ran = true;
+    let is_rollback = trimmed == "rzero load"
+        || trimmed.starts_with("rzero load ")
+        || trimmed == "rzero rollback"
+        || trimmed.starts_with("rzero rollback ");
+    if is_rollback {
+        game.close_container();
+        game.screen = super::super::Screen::Playing;
+    }
     let cmd_owned = trimmed.to_owned();
     if let Some(server) = &game.integrated {
         if let Some(lines) = server.call(move |srv| execute_rzero_command(srv, None, &cmd_owned)) {

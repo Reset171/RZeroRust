@@ -31,6 +31,8 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
             with_state_mut(|st| st.pending_save_request = true);
         }
     } else if key == load_key {
+        game.close_container();
+        game.screen = super::super::Screen::Playing;
         if let Some(server) = &game.integrated {
             let msg = server.call(|srv| {
                 if rollback_checkpoint_on_server(srv) {

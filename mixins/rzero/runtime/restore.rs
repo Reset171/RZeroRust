@@ -263,6 +263,12 @@ pub fn apply_level_snapshot_in_place(
     game.lan_block_events.clear();
     game.lan_entity_events.clear();
     game.lan_critical_hits.clear();
+
+    game.potions.clear_thrown();
+    game.potions.clouds.clear();
+    game.close_container();
+    game.station = None;
+    game.container = None;
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -434,6 +440,9 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                 host.hub.guests[gi].send(&C::RemoveEntities(play::RemoveEntities { ids: tracked }));
                 host.hub.guests[gi].tracker.clear();
             }
+
+            host.hub.guests[gi].send(&C::ContainerClose(play::ContainerClose { container: 0 }));
+            host.hub.close_container(conn);
 
             if let Some(gs) = snap.guests.get(&uuid) {
                 let g = &mut host.hub.guests[gi];

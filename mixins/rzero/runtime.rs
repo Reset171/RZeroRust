@@ -1508,6 +1508,12 @@ pub fn apply_level_snapshot_in_place(
     game.lan_block_events.clear();
     game.lan_entity_events.clear();
     game.lan_critical_hits.clear();
+
+    game.potions.clear_thrown();
+    game.potions.clouds.clear();
+    game.close_container();
+    game.station = None;
+    game.container = None;
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -1679,6 +1685,9 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                 host.hub.guests[gi].send(&C::RemoveEntities(play::RemoveEntities { ids: tracked }));
                 host.hub.guests[gi].tracker.clear();
             }
+
+            host.hub.guests[gi].send(&C::ContainerClose(play::ContainerClose { container: 0 }));
+            host.hub.close_container(conn);
 
             if let Some(gs) = snap.guests.get(&uuid) {
                 let g = &mut host.hub.guests[gi];
@@ -2061,6 +2070,14 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
         return;
     }
     *ran = true;
+    let is_rollback = trimmed == "rzero load"
+        || trimmed.starts_with("rzero load ")
+        || trimmed == "rzero rollback"
+        || trimmed.starts_with("rzero rollback ");
+    if is_rollback {
+        game.close_container();
+        game.screen = super::super::Screen::Playing;
+    }
     let cmd_owned = trimmed.to_owned();
     if let Some(server) = &game.integrated {
         if let Some(lines) = server.call(move |srv| execute_rzero_command(srv, None, &cmd_owned)) {
@@ -2414,6 +2431,8 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
             with_state_mut(|st| st.pending_save_request = true);
         }
     } else if key == load_key {
+        game.close_container();
+        game.screen = super::super::Screen::Playing;
         if let Some(server) = &game.integrated {
             let msg = server.call(|srv| {
                 if rollback_checkpoint_on_server(srv) {
