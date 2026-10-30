@@ -226,7 +226,11 @@ pub fn with_state_mut<R>(f: impl FnOnce(&mut RZeroState) -> R) -> R {
 }
 
 pub fn raids_dat_path(world_root: &Path, dim: Dim) -> PathBuf {
-    world_root.join(dim.folder()).join("data").join("raids.dat")
+    match dim {
+        Dim::Overworld => world_root.join("data").join("raids.dat"),
+        Dim::Nether => world_root.join("DIM-1").join("data").join("raids.dat"),
+        Dim::End => world_root.join("DIM1").join("data").join("raids.dat"),
+    }
 }
 
 pub fn fight_dat_path(world_root: &Path) -> PathBuf {

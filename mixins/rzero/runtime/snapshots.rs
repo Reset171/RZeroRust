@@ -175,6 +175,7 @@ pub struct GuestSnapshot {
     pub inventory: Vec<Option<ItemStack>>,
     pub armor: [Option<ItemStack>; 4],
     pub offhand: Option<ItemStack>,
+    pub carried: Option<ItemStack>,
     pub ender_items: Vec<Option<ItemStack>>,
     pub selected: usize,
     pub craft_grid: [Option<ItemStack>; 4],

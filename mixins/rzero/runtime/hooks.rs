@@ -93,6 +93,25 @@ pub fn handle_tick(game: &mut Game<'_>) {
     if !game.native_on(MOD_ID) {
         return;
     }
+
+    if game.screen == super::super::Screen::Dead {
+        let has_cp = with_state(|st| st.has_checkpoint);
+        if has_cp {
+            game.screen = super::super::Screen::Playing;
+            game.ui.death_time = 0;
+            game.ui.died_at = None;
+            game.ui.death_confirm = None;
+            if let Some(server) = &game.integrated {
+                server.call(|srv| {
+                    rollback_checkpoint_on_server(srv);
+                });
+            } else {
+                rollback_checkpoint_on_server(game);
+            }
+            return;
+        }
+    }
+
     if game.native_window() {
         return;
     }

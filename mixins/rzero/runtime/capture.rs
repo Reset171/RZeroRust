@@ -28,7 +28,9 @@ pub fn capture_chunk_ticks(
 ) -> HashMap<(i32, i32), (ChunkTicks, ChunkTicks)> {
     let mut out = HashMap::new();
     for &(cx, cz) in chunks.keys() {
-        let (b, f) = ticks.chunk_ticks(ChunkPos::new(cx, cz));
+        let cpos = ChunkPos::new(cx, cz);
+        let b = ticks.blocks.chunk(cpos).cloned().unwrap_or_default();
+        let f = ticks.fluids.chunk(cpos).cloned().unwrap_or_default();
         out.insert((cx, cz), (b, f));
     }
     out
@@ -92,7 +94,7 @@ pub fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
     }
 }
 
-pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::super::Parked) -> LevelSnapshot {
+pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::Parked) -> LevelSnapshot {
     let raids_dat = fs::read(raids_dat_path(world_root, dim)).ok();
     LevelSnapshot {
         chunks: p.world.chunks.clone(),
@@ -213,6 +215,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                     inventory: g.inventory.clone(),
                     armor: g.armor.clone(),
                     offhand: g.offhand.clone(),
+                    carried: g.carried.clone(),
                     ender_items: g.ender_items.clone(),
                     selected: g.selected,
                     craft_grid: g.craft_grid.clone(),

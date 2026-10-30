@@ -227,6 +227,26 @@ pub fn apply_level_snapshot_in_place(
 
     game.sculk.known.clear();
     game.sculk.known_revision = None;
+
+    game.tridents.clear();
+    game.rockets.clear();
+    game.bolts.clear();
+    game.dragon_fireballs.clear();
+    game.breath_clouds.clear();
+    game.ominous_spawners.clear();
+    game.spill = Default::default();
+    game.pending = Default::default();
+    game.particles.clear();
+    game.pickups.clear();
+    game.destroying.clear();
+    game.mining = None;
+    game.using = None;
+    game.hook = None;
+    game.remote_hooks.clear();
+    game.lan_events.clear();
+    game.lan_block_events.clear();
+    game.lan_entity_events.clear();
+    game.lan_critical_hits.clear();
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -394,7 +414,7 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                     g.selected = gs.selected;
                     g.craft_grid = gs.craft_grid.clone();
                     g.craft_result = gs.craft_result.clone();
-                    g.carried = None;
+                    g.carried = gs.carried.clone();
                 }
                 if policy.player_ender_chest {
                     g.ender_items = gs.ender_items.clone();

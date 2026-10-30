@@ -289,7 +289,11 @@ pub fn with_state_mut<R>(f: impl FnOnce(&mut RZeroState) -> R) -> R {
 }
 
 pub fn raids_dat_path(world_root: &Path, dim: Dim) -> PathBuf {
-    world_root.join(dim.folder()).join("data").join("raids.dat")
+    match dim {
+        Dim::Overworld => world_root.join("data").join("raids.dat"),
+        Dim::Nether => world_root.join("DIM-1").join("data").join("raids.dat"),
+        Dim::End => world_root.join("DIM1").join("data").join("raids.dat"),
+    }
 }
 
 pub fn fight_dat_path(world_root: &Path) -> PathBuf {
@@ -470,6 +474,7 @@ pub struct GuestSnapshot {
     pub inventory: Vec<Option<ItemStack>>,
     pub armor: [Option<ItemStack>; 4],
     pub offhand: Option<ItemStack>,
+    pub carried: Option<ItemStack>,
     pub ender_items: Vec<Option<ItemStack>>,
     pub selected: usize,
     pub craft_grid: [Option<ItemStack>; 4],
@@ -949,7 +954,9 @@ pub fn capture_chunk_ticks(
 ) -> HashMap<(i32, i32), (ChunkTicks, ChunkTicks)> {
     let mut out = HashMap::new();
     for &(cx, cz) in chunks.keys() {
-        let (b, f) = ticks.chunk_ticks(ChunkPos::new(cx, cz));
+        let cpos = ChunkPos::new(cx, cz);
+        let b = ticks.blocks.chunk(cpos).cloned().unwrap_or_default();
+        let f = ticks.fluids.chunk(cpos).cloned().unwrap_or_default();
         out.insert((cx, cz), (b, f));
     }
     out
@@ -1013,7 +1020,7 @@ pub fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
     }
 }
 
-pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::super::Parked) -> LevelSnapshot {
+pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::Parked) -> LevelSnapshot {
     let raids_dat = fs::read(raids_dat_path(world_root, dim)).ok();
     LevelSnapshot {
         chunks: p.world.chunks.clone(),
@@ -1134,6 +1141,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
                     inventory: g.inventory.clone(),
                     armor: g.armor.clone(),
                     offhand: g.offhand.clone(),
+                    carried: g.carried.clone(),
                     ender_items: g.ender_items.clone(),
                     selected: g.selected,
                     craft_grid: g.craft_grid.clone(),
@@ -1411,6 +1419,26 @@ pub fn apply_level_snapshot_in_place(
 
     game.sculk.known.clear();
     game.sculk.known_revision = None;
+
+    game.tridents.clear();
+    game.rockets.clear();
+    game.bolts.clear();
+    game.dragon_fireballs.clear();
+    game.breath_clouds.clear();
+    game.ominous_spawners.clear();
+    game.spill = Default::default();
+    game.pending = Default::default();
+    game.particles.clear();
+    game.pickups.clear();
+    game.destroying.clear();
+    game.mining = None;
+    game.using = None;
+    game.hook = None;
+    game.remote_hooks.clear();
+    game.lan_events.clear();
+    game.lan_block_events.clear();
+    game.lan_entity_events.clear();
+    game.lan_critical_hits.clear();
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -1578,7 +1606,7 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                     g.selected = gs.selected;
                     g.craft_grid = gs.craft_grid.clone();
                     g.craft_result = gs.craft_result.clone();
-                    g.carried = None;
+                    g.carried = gs.carried.clone();
                 }
                 if policy.player_ender_chest {
                     g.ender_items = gs.ender_items.clone();
@@ -2297,6 +2325,25 @@ pub fn handle_tick(game: &mut Game<'_>) {
     if !game.native_on(MOD_ID) {
         return;
     }
+
+    if game.screen == super::super::Screen::Dead {
+        let has_cp = with_state(|st| st.has_checkpoint);
+        if has_cp {
+            game.screen = super::super::Screen::Playing;
+            game.ui.death_time = 0;
+            game.ui.died_at = None;
+            game.ui.death_confirm = None;
+            if let Some(server) = &game.integrated {
+                server.call(|srv| {
+                    rollback_checkpoint_on_server(srv);
+                });
+            } else {
+                rollback_checkpoint_on_server(game);
+            }
+            return;
+        }
+    }
+
     if game.native_window() {
         return;
     }
