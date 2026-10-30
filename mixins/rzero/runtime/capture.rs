@@ -38,20 +38,26 @@ pub fn capture_chunk_ticks(
 
 pub fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
     let mut map = HashMap::new();
-    let dirs = ["playerdata", "stats", "advancements"];
-    for dir_name in dirs {
-        let dir = world_root.join(dir_name);
+    fn walk_dir(dir: &Path, map: &mut HashMap<PathBuf, Vec<u8>>) {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Ok(bytes) = fs::read(&path) {
-                        map.insert(path, bytes);
+                let p = entry.path();
+                if p.is_dir() {
+                    walk_dir(&p, map);
+                } else if p.is_file() {
+                    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    if ext == "dat" || ext == "json" {
+                        if let Ok(bytes) = fs::read(&p) {
+                            map.insert(p, bytes);
+                        }
                     }
                 }
             }
         }
     }
+    walk_dir(&world_root.join("data"), &mut map);
+    walk_dir(&world_root.join("dimensions"), &mut map);
+    walk_dir(&world_root.join("players"), &mut map);
     map
 }
 
@@ -91,6 +97,8 @@ pub fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
         persist_uuids: game.persist.uuids.clone(),
         persist_raw: game.persist.raw.clone(),
         raids_dat,
+        last_hurt_by_player: game.last_hurt_by_player.clone(),
+        love_cause: game.love_cause.clone(),
     }
 }
 
@@ -130,12 +138,15 @@ pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::Parked) -
         persist_uuids: p.persist.uuids.clone(),
         persist_raw: p.persist.raw.clone(),
         raids_dat,
+        last_hurt_by_player: HashMap::new(),
+        love_cause: HashMap::new(),
     }
 }
 
 pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>) {
     game.save_raids();
     game.save_fight();
+    game.save_wandering_trader();
 
     let mut guests = HashMap::new();
     let mut online = Vec::new();
@@ -257,6 +268,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
     });
 
     let dragon_fight_dat = fs::read(fight_dat_path(&game.world_root)).ok();
+    let trader_dat = fs::read(trader_dat_path(&game.world_root)).ok();
     let offline_player_data = backup_offline_files(&game.world_root);
 
     let timeline = TimelineSnapshot {
@@ -272,6 +284,8 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         sculk_tracker: game.sculk.tracker,
         sculk_darkness: game.sculk.darkness,
         dragon_fight_dat,
+        trader_dat,
+        rand_sequences: game.rand_sequences.clone(),
         difficulty: game.ui.difficulty,
         difficulty_locked: game.level.difficulty_locked,
         world_spawn: game.level.world_spawn,

@@ -225,6 +225,8 @@ pub struct LevelSnapshot {
     pub persist_uuids: HashMap<u32, [i32; 4]>,
     pub persist_raw: HashMap<u32, Tag>,
     pub raids_dat: Option<Vec<u8>>,
+    pub last_hurt_by_player: HashMap<u32, Option<u32>>,
+    pub love_cause: HashMap<u32, Option<u32>>,
 }
 
 #[derive(Clone)]
@@ -241,6 +243,8 @@ pub struct TimelineSnapshot {
     pub sculk_tracker: WardenSpawnTracker,
     pub sculk_darkness: (f32, f32),
     pub dragon_fight_dat: Option<Vec<u8>>,
+    pub trader_dat: Option<Vec<u8>>,
+    pub rand_sequences: horizon_client::random_sequences::RandomSequences,
     pub difficulty: u8,
     pub difficulty_locked: bool,
     pub world_spawn: Option<[i32; 3]>,

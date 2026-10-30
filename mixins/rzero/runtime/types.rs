@@ -226,15 +226,23 @@ pub fn with_state_mut<R>(f: impl FnOnce(&mut RZeroState) -> R) -> R {
 }
 
 pub fn raids_dat_path(world_root: &Path, dim: Dim) -> PathBuf {
-    match dim {
-        Dim::Overworld => world_root.join("data").join("raids.dat"),
-        Dim::Nether => world_root.join("DIM-1").join("data").join("raids.dat"),
-        Dim::End => world_root.join("DIM1").join("data").join("raids.dat"),
-    }
+    let dim_folder = match dim {
+        Dim::Overworld => "minecraft/overworld",
+        Dim::Nether => "minecraft/the_nether",
+        Dim::End => "minecraft/the_end",
+    };
+    world_root
+        .join("dimensions")
+        .join(dim_folder)
+        .join("data/minecraft/raids.dat")
 }
 
 pub fn fight_dat_path(world_root: &Path) -> PathBuf {
-    world_root.join("data").join("ender_dragon_fight.dat")
+    world_root.join("data/minecraft/ender_dragon_fight.dat")
+}
+
+pub fn trader_dat_path(world_root: &Path) -> PathBuf {
+    world_root.join("data/minecraft/wandering_trader.dat")
 }
 
 pub fn resolve_anchors(

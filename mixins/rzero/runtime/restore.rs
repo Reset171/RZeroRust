@@ -228,6 +228,20 @@ pub fn apply_level_snapshot_in_place(
     game.sculk.known.clear();
     game.sculk.known_revision = None;
 
+    game.last_hurt_by_player = snap.last_hurt_by_player.clone();
+    game.love_cause = snap.love_cause.clone();
+    game.died.clear();
+    game.combat = Default::default();
+    game.guest_combat.clear();
+    game.stabbed.clear();
+    game.kinetic_feedback.clear();
+    game.brushing = Default::default();
+    game.lid_openers.clear();
+    game.be_anims = Default::default();
+    game.lan_songs.clear();
+    game.lan_cushion_breaks.clear();
+    game.lan_global_events.clear();
+
     game.tridents.clear();
     game.rockets.clear();
     game.bolts.clear();
@@ -305,6 +319,21 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
     game.sculk.tracker = snap.sculk_tracker;
     game.sculk.darkness = snap.sculk_darkness;
     game.next_entity = snap.next_entity;
+    game.rand_sequences = snap.rand_sequences.clone();
+
+    let trader_path = trader_dat_path(&game.world_root);
+    match &snap.trader_dat {
+        Some(bytes) => {
+            if let Some(parent) = trader_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(&trader_path, bytes);
+        }
+        None => {
+            let _ = fs::remove_file(&trader_path);
+        }
+    }
+    game.creatures.reset_trader();
 
     restore_offline_files(&snap.offline_player_data, policy.player_stats);
 
