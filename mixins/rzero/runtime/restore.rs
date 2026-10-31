@@ -637,7 +637,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             }
 
             if policy.player_abilities {
-                host.hub.set_game_mode(conn, gs.game_mode);
+                host.hub.set_game_mode(conn, gs.game_mode, &game.world, Some(game.collision));
             }
             if policy.player_position {
                 if dim_changed {
