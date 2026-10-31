@@ -18,8 +18,9 @@ class RZeroHarness:
         self.socket_path = Path(socket_path)
         self.sock = None
 
-    def connect(self, timeout=30):
+    def connect(self, timeout=35, auto_launch=True):
         start = time.time()
+        launched = False
         while time.time() - start < timeout:
             if self.socket_path.exists():
                 try:
@@ -30,6 +31,10 @@ class RZeroHarness:
                     return True
                 except (socket.error, ConnectionRefusedError):
                     pass
+            elif auto_launch and not launched and (time.time() - start > 2.0):
+                print("[Harness] Socket not found, launching game in background...")
+                launch_game()
+                launched = True
             time.sleep(0.5)
         raise TimeoutError(f"Could not connect to socket {self.socket_path} after {timeout}s")
 
@@ -128,6 +133,7 @@ def launch_game(instance=DEFAULT_INSTANCE, world=DEFAULT_WORLD, offscreen=True):
     ]
     if offscreen:
         cmd.append("--offscreen")
+    cmd += ["--arg", "--control"]
 
     env = dict(os.environ)
     env["HORIZON_NO_AUDIO"] = "1"
