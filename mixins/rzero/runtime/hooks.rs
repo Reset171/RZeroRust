@@ -115,6 +115,7 @@ pub fn handle_tick(game: &mut Game<'_>) {
             game.ui.death_time = 0;
             game.ui.died_at = None;
             game.ui.death_confirm = None;
+            game.boss_overlay.reset();
             if let Some(p) = game.player.as_mut() {
                 let _ = p.set_health(20.0, false);
                 p.invulnerable = false;

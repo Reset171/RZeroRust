@@ -668,6 +668,33 @@ def test_16_flying_arrow_projectile(h):
 
 
 # ============================================================================
+# Test 17: End Dragon bossbar cross-dimension rollback
+# ============================================================================
+def test_17_end_dragon_bossbar_rollback(h):
+    setup_clean_env(h)
+    h.tp(0.5, 65.0, 0.5)
+    h.wait(8)
+
+    # 1. Чекпоинт в Оверворлде (боссбара нет)
+    h.rzero("set")
+    h.wait(4)
+
+    # 2. ТП в Энд
+    h.command("execute in minecraft:the_end run tp @s 0.5 70.0 0.5")
+    h.wait(14)
+    st_end = h.state()
+    assert st_end.get("dimension") == "minecraft:the_end", f"Not in End: {st_end.get('dimension')}"
+
+    # 3. Откат к чекпоинту в Оверворлде
+    h.rzero("load")
+    h.wait(14)
+
+    st_back = h.state()
+    assert st_back.get("dimension") == "minecraft:overworld", f"Dimension not rolled back: {st_back.get('dimension')}"
+    assert abs(st_back["player"]["position"][0] - 0.5) < 2.0, f"Position not rolled back: {st_back['player']['position']}"
+
+
+# ============================================================================
 # Main test suite runner
 # ============================================================================
 def main():
@@ -700,6 +727,7 @@ def main():
         ("Test 14: Chest Container Inventory Rollback", lambda: test_14_chest_container_rollback(h)),
         ("Test 15: Piston and Redstone State Rollback", lambda: test_15_piston_redstone_machine(h)),
         ("Test 16: Flying Projectile Arrow Determinism", lambda: test_16_flying_arrow_projectile(h)),
+        ("Test 17: End Dragon Bossbar Cross-Dimension Rollback", lambda: test_17_end_dragon_bossbar_rollback(h)),
     ]
 
     selected = tests

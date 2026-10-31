@@ -42,7 +42,7 @@ use super::super::{
 use horizon_client::{
     advancements::Progress,
     blocks::Fluid,
-    bossbar::BossBars,
+    bossbar::{self, BossBars},
     chunk::Chunk,
     containers::BlockEntity,
     cooldowns::Cooldowns,

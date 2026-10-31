@@ -321,7 +321,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.border = snap.border.clone();
     }
     if policy.server_bossbars {
-        game.bosses.bars = BossBars::unpack(&snap.bossbars);
+        let bars = BossBars::unpack(&snap.bossbars);
+        game.bosses = Default::default();
+        game.bosses.bars = bars;
     }
     if policy.world_scoreboard {
         game.score.board = snap.scoreboard.clone();
@@ -623,6 +625,12 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                         g.send(&C::ForgetLevelChunk(play::ForgetLevelChunk { pos: [x, z] }));
                     }
                 }
+
+                let dragon_bar_id = horizon_client::bossbar::stable_uuid("minecraft:ender_dragon");
+                g.send(&C::BossEvent(play::BossEvent {
+                    id: dragon_bar_id,
+                    action: play::BossAction::Remove,
+                }));
             } // конец заимствования g
 
             if let Some(play_state) = host.play.get_mut(&conn) {
@@ -700,6 +708,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         }
     }
 
+    game.boss_overlay.reset();
     if policy.server_bossbars {
         game.publish_boss_bars();
     }
