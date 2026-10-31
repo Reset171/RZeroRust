@@ -375,6 +375,7 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
         &game.settings,
         &game.world_root,
         game.dim,
+        game.world.shape,
         game.level.seed,
     ) {
         game.streaming = fresh_streaming;

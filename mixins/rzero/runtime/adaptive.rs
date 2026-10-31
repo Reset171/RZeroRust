@@ -49,7 +49,7 @@ pub fn is_guest_safe(game: &Game<'_>, g: &horizon_client::lan::guest::Guest) -> 
         return false;
     }
     if !g.on_ground && !g.flying && !g.creative() && !g.spectator() {
-        let min_y = game.dim.min_y();
+        let min_y = game.world.shape.min_y;
         let mut probe_y = by;
         let mut found_ground = false;
         let mut expected_damage = 0.0f32;
