@@ -100,6 +100,11 @@ pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot)
     let cp_data = cp_dir.join("data");
     copy_dir_recursive(&data_dir, &cp_data);
 
+    // 3.5. Копируем файлы измерений и регионов
+    let dims_dir = world_root.join("dimensions");
+    let cp_dims = cp_dir.join("dimensions");
+    copy_dir_recursive(&dims_dir, &cp_dims);
+
     // 4. Сохраняем метаданные гостей и чекпоинта
     let mut guests_json = Vec::new();
     for g in snap.guests.values() {
@@ -189,6 +194,11 @@ pub fn restore_disk_files_for_slot(world_root: &Path, slot: &str) {
     let target_data = world_root.join("data");
     if cp_data.is_dir() {
         copy_dir_recursive(&cp_data, &target_data);
+    }
+    let cp_dims = cp_dir.join("dimensions");
+    let target_dims = world_root.join("dimensions");
+    if cp_dims.is_dir() {
+        copy_dir_recursive(&cp_dims, &target_dims);
     }
 }
 
@@ -343,6 +353,7 @@ pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnap
                 stats: BTreeMap::new(),
                 seen_credits: g_val["seen_credits"].as_bool().unwrap_or(false),
                 saved: player_tag.clone(),
+                hook: None,
             };
 
             if let Some(tag) = &player_tag {
@@ -419,6 +430,7 @@ pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnap
         guests,
         offline_player_data,
         levels: HashMap::new(),
+        mob_players: HashMap::new(),
     })
 }
 

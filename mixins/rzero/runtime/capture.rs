@@ -149,6 +149,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
 }
 
 pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>, slot: &str) {
+    let _ = game.save.flush();
     game.save_raids();
     game.save_fight();
     game.save_wandering_trader();
@@ -186,13 +187,17 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
                     )
                 }
             };
-            let (shield_cooldown, cooldowns, stats) = match host.play.get(&g.conn) {
+            let (shield_cooldown, cooldowns, stats, hook) = match host.play.get(&g.conn) {
                 Some(p) => (
                     p.shield_cooldown,
                     p.cooldowns.clone(),
                     p.stats.values.clone(),
+                    p.hook.as_ref().map(|h| HookSnapshot {
+                        id: h.id(),
+                        position: [h.position.x, h.position.y, h.position.z],
+                    }),
                 ),
-                None => (0, Cooldowns::default(), BTreeMap::new()),
+                None => (0, Cooldowns::default(), BTreeMap::new(), None),
             };
             guests.insert(
                 g.uuid,
@@ -247,6 +252,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
                     stats,
                     seen_credits: g.seen_credits,
                     saved: g.saved.clone(),
+                    hook,
                 },
             );
         }
@@ -325,8 +331,10 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         guests,
         offline_player_data,
         levels,
+        mob_players: game.lan.as_ref().map(|h| h.mob_players.clone()).unwrap_or_default(),
     };
 
+    let _ = game.save.flush();
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
 }

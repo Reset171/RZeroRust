@@ -189,6 +189,13 @@ pub struct GuestSnapshot {
     pub stats: BTreeMap<String, BTreeMap<String, i32>>,
     pub seen_credits: bool,
     pub saved: Option<Tag>,
+    pub hook: Option<HookSnapshot>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HookSnapshot {
+    pub id: u32,
+    pub position: [f64; 3],
 }
 
 #[derive(Clone)]
@@ -256,6 +263,7 @@ pub struct TimelineSnapshot {
     pub guests: HashMap<u128, GuestSnapshot>,
     pub offline_player_data: HashMap<PathBuf, Vec<u8>>,
     pub levels: HashMap<Dim, LevelSnapshot>,
+    pub mob_players: HashMap<u32, u32>,
 }
 
 std::thread_local! {

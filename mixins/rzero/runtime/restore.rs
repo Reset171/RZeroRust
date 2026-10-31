@@ -261,8 +261,6 @@ pub fn apply_level_snapshot_in_place(
     game.destroying.clear();
     game.mining = None;
     game.using = None;
-    game.hook = None;
-    game.remote_hooks.clear();
     game.lan_events.clear();
     game.lan_block_events.clear();
     game.lan_entity_events.clear();
@@ -281,6 +279,9 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 }
 
 pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
+    let _ = game.save.flush();
+    game.world.modified.clear();
+    game.world.loaded_entities.clear();
     let snap = match get_slot_snapshot_clone(slot) {
         Some(s) => s,
         None => match load_slot_from_disk(&game.world_root, slot) {
@@ -447,6 +448,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         if policy.server_world_border {
             host.border_sent = None;
         }
+        if policy.entities_presence {
+            host.mob_players = snap.mob_players.clone();
+        }
         for gi in 0..host.hub.guests.len() {
             if !host.hub.guests[gi].placed {
                 continue;
@@ -463,8 +467,10 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             host.hub.close_container(conn);
 
             if let Some(gs) = snap.guests.get(&uuid) {
-                let g = &mut host.hub.guests[gi];
-                let dim_changed = policy.player_position && g.dimension != gs.dimension;
+                let ent_id = host.hub.guests[gi].entity_id as i32;
+                let dim_changed = policy.player_position && host.hub.guests[gi].dimension != gs.dimension;
+                {
+                    let g = &mut host.hub.guests[gi];
                 if policy.player_position {
                     g.dimension = gs.dimension.clone();
                     g.position = gs.position;
@@ -608,41 +614,63 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                     }));
                 }
 
-                if let Some(play_state) = host.play.get_mut(&conn) {
-                    if policy.player_cooldowns {
-                        play_state.shield_cooldown = gs.shield_cooldown;
-                        play_state.cooldowns = gs.cooldowns.clone();
-                    }
-                    if policy.player_stats {
-                        play_state.stats.values = gs.stats.clone();
-                        play_state.stats.mark_all_dirty();
+                let active_snap_chunks = snap.levels.get(&game.dim).map(|l| &l.chunks);
+                let forget: Vec<_> = g.sent_chunks.iter().copied().collect();
+                for (x, z) in forget {
+                    let in_snap = active_snap_chunks.is_some_and(|c| c.contains_key(&(x, z)));
+                    if !in_snap {
+                        g.sent_chunks.remove(&(x, z));
+                        g.send(&C::ForgetLevelChunk(play::ForgetLevelChunk { pos: [x, z] }));
                     }
                 }
+            } // конец заимствования g
 
-                if policy.player_abilities {
-                    host.hub.set_game_mode(conn, gs.game_mode);
+            if let Some(play_state) = host.play.get_mut(&conn) {
+                if policy.player_cooldowns {
+                    play_state.shield_cooldown = gs.shield_cooldown;
+                    play_state.cooldowns = gs.cooldowns.clone();
                 }
-                if policy.player_position {
-                    if dim_changed {
-                        let target_dim = Dim::from_id(&gs.dimension);
-                        game.level_teleports
-                            .push(super::super::server_travel::LevelTeleport {
-                                conn,
-                                dim: target_dim,
-                                at: gs.position,
-                                rotation: Some([gs.yaw, gs.pitch]),
-                            });
-                    } else {
-                        host.hub.teleport(gi, Some(gs.position));
-                    }
+                if policy.player_stats {
+                    play_state.stats.values = gs.stats.clone();
+                    play_state.stats.mark_all_dirty();
                 }
-                if policy.player_inventory {
-                    host.hub.send_inventory(gi);
+            }
+
+            if policy.player_abilities {
+                host.hub.set_game_mode(conn, gs.game_mode);
+            }
+            if policy.player_position {
+                if dim_changed {
+                    let target_dim = Dim::from_id(&gs.dimension);
+                    game.level_teleports
+                        .push(super::super::server_travel::LevelTeleport {
+                            conn,
+                            dim: target_dim,
+                            at: gs.position,
+                            rotation: Some([gs.yaw, gs.pitch]),
+                        });
+                } else {
+                    host.hub.teleport(gi, Some(gs.position));
                 }
-                if policy.player_potion_effects {
-                    host.hub.send_active_effects(gi);
-                }
-                host.hub.flush_progress(conn);
+            }
+            if policy.player_inventory {
+                host.hub.send_inventory(gi);
+            }
+            if policy.player_potion_effects {
+                host.hub.send_active_effects(gi);
+            }
+            if let Some(hs) = &gs.hook {
+                game.spawn_remote_hook(
+                    hs.id,
+                    Vec3::new(hs.position[0], hs.position[1], hs.position[2]),
+                    Vec3::ZERO,
+                    ent_id,
+                );
+            } else if let Some(h) = game.hook.take() {
+                game.remove_remote_hook(h.id());
+            }
+
+            host.hub.flush_progress(conn);
             } else if !policy.preserve_new_player_inventory {
                 let g = &mut host.hub.guests[gi];
                 g.inventory = vec![None; 36];

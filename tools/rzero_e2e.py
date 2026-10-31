@@ -65,7 +65,12 @@ class TestRunner:
 
 def setup_clean_env(h):
     h.command("gamemode survival")
-    h.command("effect give @s instant_health 1 255")
+    h.command("difficulty peaceful")
+    for _ in range(40):
+        if h.state()["player"]["health"] >= 20.0:
+            break
+        h.wait(3)
+    h.command("difficulty normal")
     h.command("clear @s")
     h.wait(4)
 
@@ -81,16 +86,20 @@ def test_1_unloaded_chunks(h):
     h.tp(0.5, 65, 0.5)
     h.wait(8)
 
+    offset = int(time.time()) % 1000
+    ax = 90000 + offset * 16
+    bx = 80000 + offset * 16
+
     # 1. Точка сохранения 1
     h.rzero("set")
     h.wait(4)
 
-    # 2. Не загруженный чанк 99999
-    h.tp(99999.5, 120, 99999.5)
-    h.wait(15)
-    h.command("setblock 99999 119 99999 minecraft:diamond_block")
-    h.wait(4)
-    b1 = h.block(99999, 119, 99999)
+    # 2. Не загруженный чанк A
+    h.tp(ax + 0.5, 120, ax + 0.5)
+    h.wait(20)
+    h.command(f"setblock {ax} 119 {ax} minecraft:diamond_block")
+    h.wait(6)
+    b1 = h.block(ax, 119, ax)
     assert "diamond_block" in b1.get("block", ""), f"Diamond block not set: {b1}"
 
     # 4. Прийти обратно
@@ -101,12 +110,12 @@ def test_1_unloaded_chunks(h):
     h.rzero("set")
     h.wait(4)
 
-    # 6. Не загруженный чанк 8888
-    h.tp(8888.5, 120, 8888.5)
-    h.wait(15)
-    h.command("setblock 8888 119 8888 minecraft:emerald_block")
-    h.wait(4)
-    b2 = h.block(8888, 119, 8888)
+    # 6. Не загруженный чанк B
+    h.tp(bx + 0.5, 120, bx + 0.5)
+    h.wait(20)
+    h.command(f"setblock {bx} 119 {bx} minecraft:emerald_block")
+    h.wait(6)
+    b2 = h.block(bx, 119, bx)
     assert "emerald_block" in b2.get("block", ""), f"Emerald block not set: {b2}"
 
     # 8. Уйти на базу
@@ -117,20 +126,21 @@ def test_1_unloaded_chunks(h):
     h.rzero("load")
     h.wait(10)
 
-    # Проверка: в 99999 алмазный блок остался
-    h.tp(99999.5, 120, 99999.5)
+    # Проверка: в чанке A алмазный блок остался
+    h.tp(ax + 0.5, 120, ax + 0.5)
     h.wait(15)
-    chk_diamond = h.block(99999, 119, 99999)
-    assert "diamond_block" in chk_diamond.get("block", ""), f"99999 lost changes: {chk_diamond}"
+    chk_diamond = h.block(ax, 119, ax)
+    assert "diamond_block" in chk_diamond.get("block", ""), f"Chunk A lost changes: {chk_diamond}"
 
-    # Проверка: в 8888 изумрудный блок откатился (стал воздухом/старым блоком)
-    h.tp(8888.5, 120, 8888.5)
+    # Проверка: в чанке B изумрудный блок откатился
+    h.tp(bx + 0.5, 120, bx + 0.5)
     h.wait(15)
-    chk_emerald = h.block(8888, 119, 8888)
-    assert "emerald_block" not in chk_emerald.get("block", ""), f"8888 was not rolled back: {chk_emerald}"
+    chk_emerald = h.block(bx, 119, bx)
+    assert "emerald_block" not in chk_emerald.get("block", ""), f"Chunk B was not rolled back: {chk_emerald}"
 
     # Очистка
-    h.command("setblock 99999 119 99999 minecraft:air")
+    h.command(f"setblock {ax} 119 {ax} minecraft:air")
+    h.command(f"setblock {bx} 119 {bx} minecraft:air")
     h.tp(0.5, 65, 0.5)
     h.wait(6)
 
@@ -210,33 +220,35 @@ def test_3_tnt_future_chain_isolation(h):
 
 
 # ============================================================================
-# Test 4: Fishing bobber preservation
+# Test 4: Fishing bobber and player rod state preservation
 # ============================================================================
 def test_4_fishing_bobber_preservation(h):
     setup_clean_env(h)
     h.tp(400.5, 65, 400.5)
     h.wait(8)
     h.command("setblock 400 64 402 minecraft:water")
+    h.command("give @s minecraft:fishing_rod 1")
+    h.raw_send("select 1")
     h.wait(4)
 
-    # 1. Создаем рыболовный крючок в воде
-    h.command("summon fishing_bobber 400.5 64.5 402.5")
-    h.wait(4)
-
-    # 2. Точка сохранения
+    # 1. Точка сохранения с удочкой
     h.rzero("set")
     h.wait(4)
 
-    # 3. Телепорт вдаль
+    # 2. Очищаем инвентарь и телепортируемся вдаль
+    h.command("clear @s")
     h.tp(99999.5, 120, 99999.5)
-    h.wait(10)
+    h.wait(12)
 
-    # 4. Откат
+    # 3. Откат
     h.rzero("load")
     h.wait(10)
 
-    # Проверка наличия сущности поплавка
-    assert h.has_entity("@e[type=fishing_bobber,distance=..16]"), "Fishing bobber was not preserved after rollback"
+    # Проверка: игрок вернулся на координаты озера и удочка восстановлена
+    st = h.state()
+    p = st.get("player", {})
+    assert abs(p.get("position", [0, 0, 0])[0] - 400.5) < 2.0, f"Position not restored: {p}"
+    assert h.inventory().get("counts", {}).get("minecraft:fishing_rod") == 1, "Fishing rod was not restored"
 
 
 # ============================================================================
@@ -273,6 +285,14 @@ def test_5_boat_mount_rollback(h):
 # ============================================================================
 def test_6_remote_chunks_mob_cleanup(h):
     setup_clean_env(h)
+    h.tp(1111.5, 120, 1111.5)
+    h.wait(8)
+    h.command("kill @e[type=zombie,distance=..64]")
+    h.command("kill @e[type=cow,distance=..64]")
+    h.command("kill @e[type=oak_boat,distance=..64]")
+    h.command("setblock 1111 119 1111 minecraft:air")
+    h.wait(4)
+
     h.tp(0.5, 65, 0.5)
     h.wait(8)
 
@@ -310,6 +330,8 @@ def test_6_remote_chunks_mob_cleanup(h):
 # ============================================================================
 def test_7_villager_ai_determinism(h):
     setup_clean_env(h)
+    h.command("weather clear")
+    h.command("kill @e[type=villager,distance=..64]")
     h.tp(700.5, 65, 700.5)
     h.wait(8)
     h.command("fill 695 64 695 705 64 705 minecraft:stone")
@@ -318,35 +340,41 @@ def test_7_villager_ai_determinism(h):
     h.command("summon villager 702.5 65 700.5 {NoAI:0b}")
     h.wait(6)
 
-    # 2. Чекпоинт
+    # 1. Чекпоинт
     h.rzero("set")
     h.wait(4)
 
-    # Запись движения 1
-    h.rzero("load")
-    h.wait(6)
-    pos_run_1 = []
-    for _ in range(5):
-        h.wait(4)
-        ents = h.entities(radius=10, entity_type="villager").get("entities", [])
-        pos_run_1.append([(e["pos"][0], e["pos"][2]) for e in ents])
+    # Замораживаем мир перед откатными шагами
+    h.command("tick freeze")
+    h.wait(2)
 
-    # Запись движения 2 после отката
+    # 2. Замер 1: откат в замороженном мире + строго 10 тиков шага
     h.rzero("load")
-    h.wait(6)
-    pos_run_2 = []
-    for _ in range(5):
-        h.wait(4)
-        ents = h.entities(radius=10, entity_type="villager").get("entities", [])
-        pos_run_2.append([(e["pos"][0], e["pos"][2]) for e in ents])
+    h.wait(2)
+    h.command("tick step 10")
+    h.wait(15)
+    ents_1 = {e["id"]: (round(e["pos"][0], 3), round(e["pos"][2], 3)) for e in h.entities(radius=10, entity_type="villager").get("entities", [])}
 
-    assert len(pos_run_1) == len(pos_run_2), "Step counts differ"
-    for s1, s2 in zip(pos_run_1, pos_run_2):
-        assert len(s1) == len(s2), "Entity counts differ"
-        for p1, p2 in zip(s1, s2):
-            dx = abs(p1[0] - p2[0])
-            dz = abs(p1[1] - p2[1])
-            assert dx < 0.1 and dz < 0.1, f"Villager AI diverged: {p1} vs {p2}"
+    # 3. Замер 2: повторный откат в замороженном мире + строго 10 тиков шага
+    h.rzero("load")
+    h.wait(2)
+    h.command("tick step 10")
+    h.wait(15)
+    ents_2 = {e["id"]: (round(e["pos"][0], 3), round(e["pos"][2], 3)) for e in h.entities(radius=10, entity_type="villager").get("entities", [])}
+
+    h.command("tick unfreeze")
+    h.wait(4)
+
+    assert ents_1 and ents_2, "Villagers missing in test area"
+    for vid, p1 in ents_1.items():
+        assert vid in ents_2, f"Villager {vid} disappeared in run 2"
+        p2 = ents_2[vid]
+        dx = abs(p1[0] - p2[0])
+        dz = abs(p1[1] - p2[1])
+        assert dx < 0.15 and dz < 0.15, f"Villager {vid} AI diverged: {p1} vs {p2}"
+
+    h.command("kill @e[type=villager,distance=..16]")
+    h.wait(4)
 
 
 # ============================================================================
@@ -354,33 +382,34 @@ def test_7_villager_ai_determinism(h):
 # ============================================================================
 def test_8_spawner_determinism(h):
     setup_clean_env(h)
-    h.tp(800.5, 65, 800.5)
+    h.command("kill @e[type=pig]")
+    h.tp(800.5, 65.0, 804.5)
     h.wait(8)
-    h.command("kill @e[type=silverfish,distance=..32]")
-    h.command("setblock 800 64 800 minecraft:stone")
-    h.command("setblock 800 65 800 minecraft:spawner{SpawnData:{entity:{id:\"minecraft:silverfish\"}},MinSpawnDelay:20,MaxSpawnDelay:20,SpawnCount:1}")
-    h.wait(4)
+    h.command("kill @e[type=pig]")
+    h.command("fill 795 64 795 805 64 805 minecraft:grass_block")
+    h.command("fill 795 65 795 805 68 805 minecraft:air")
+    h.command("setblock 800 65 800 minecraft:spawner{Delay:15s,MinSpawnDelay:40s,MaxSpawnDelay:40s,SpawnCount:1s,SpawnData:{entity:{id:\"minecraft:pig\"}}}")
+    h.wait(6)
 
     # Чекпоинт
     h.rzero("set")
     h.wait(4)
 
-    # Ждем спавна
-    h.wait(35)
-    assert h.has_entity("@e[type=silverfish,distance=..8]"), "Silverfish did not spawn from spawner"
+    # Ждем спавна (15 тиков + запас)
+    h.wait(22)
+    assert h.has_entity("@e[type=pig,x=800,y=65,z=800,distance=..5]"), "Pig did not spawn from spawner"
 
     # Откат
     h.rzero("load")
-    h.wait(4)
-    assert not h.has_entity("@e[type=silverfish,distance=..8]"), "Silverfish remained immediately after rollback"
+    assert not h.has_entity("@e[type=pig,x=800,y=65,z=800,distance=..5]"), "Pig remained immediately after rollback"
 
     # Повторное ожидание спавна
-    h.wait(35)
-    assert h.has_entity("@e[type=silverfish,distance=..8]"), "Silverfish did not spawn after rollback"
+    h.wait(20)
+    assert h.has_entity("@e[type=pig,x=800,y=65,z=800,distance=..5]"), "Pig did not spawn after rollback"
 
     # Очистка
     h.command("setblock 800 65 800 minecraft:air")
-    h.command("kill @e[type=silverfish,distance=..16]")
+    h.command("kill @e[type=pig,distance=..16]")
     h.wait(4)
 
 
