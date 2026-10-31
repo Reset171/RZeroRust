@@ -30,6 +30,7 @@ use horizon_client::{
     mobs::Species,
     projectiles::Projectile,
     recipe_book::Settings as RecipeBookSettings,
+    save::{item_from_nbt, read_dat, write_dat, Level},
     scoreboard::Scoreboard,
     sculk::WardenSpawnTracker,
     text::Text,
@@ -1262,6 +1263,7 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         levels,
     };
 
+    save_checkpoint_to_disk(&game.world_root, &timeline);
     set_snapshot(Some(timeline));
 }
 
@@ -1517,9 +1519,17 @@ pub fn apply_level_snapshot_in_place(
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
-    let Some(snap) = get_snapshot_clone() else {
-        return false;
+    let snap = match get_snapshot_clone() {
+        Some(s) => s,
+        None => match load_checkpoint_from_disk(&game.world_root) {
+            Some(s) => {
+                set_snapshot(Some(s.clone()));
+                s
+            }
+            None => return false,
+        },
     };
+    restore_disk_files_on_rollback(&game.world_root);
     let policy = &snap.policy;
 
     if policy.world_time {
@@ -1912,6 +1922,406 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
         st.relax_ticks = 0;
     });
     true
+}
+
+// ============================================================================
+// Submodule: persistence.rs
+// ============================================================================
+
+
+pub fn checkpoint_dir(world_root: &Path) -> PathBuf {
+    world_root.join("rzero").join("checkpoint")
+}
+
+pub fn has_disk_checkpoint(world_root: &Path) -> bool {
+    checkpoint_dir(world_root).join("meta.json").is_file()
+}
+
+pub fn copy_dir_recursive(src: &Path, dst: &Path) {
+    if !src.is_dir() {
+        return;
+    }
+    let _ = fs::create_dir_all(dst);
+    if let Ok(entries) = fs::read_dir(src) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            let target = dst.join(entry.file_name());
+            if p.is_dir() {
+                copy_dir_recursive(&p, &target);
+            } else if p.is_file() {
+                let _ = fs::copy(&p, &target);
+            }
+        }
+    }
+}
+
+pub fn collect_files_recursive(
+    dir: &Path,
+    map: &mut HashMap<PathBuf, Vec<u8>>,
+    target_base: &Path,
+    rel_prefix: &Path,
+) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            let fname = entry.file_name();
+            let next_rel = rel_prefix.join(fname);
+            if p.is_dir() {
+                collect_files_recursive(&p, map, target_base, &next_rel);
+            } else if p.is_file() {
+                if let Ok(bytes) = fs::read(&p) {
+                    map.insert(target_base.join(&next_rel), bytes);
+                }
+            }
+        }
+    }
+}
+
+pub fn save_checkpoint_to_disk(world_root: &Path, snap: &TimelineSnapshot) -> bool {
+    let cp_dir = checkpoint_dir(world_root);
+    if fs::create_dir_all(&cp_dir).is_err() {
+        return false;
+    }
+
+    // 1. Копируем level.dat
+    let level_dat = world_root.join("level.dat");
+    if level_dat.is_file() {
+        let _ = fs::copy(&level_dat, cp_dir.join("level.dat"));
+    }
+
+    // 2. Копируем папку players
+    let players_dir = world_root.join("players");
+    let cp_players = cp_dir.join("players");
+    copy_dir_recursive(&players_dir, &cp_players);
+
+    // 3. Копируем папку data
+    let data_dir = world_root.join("data");
+    let cp_data = cp_dir.join("data");
+    copy_dir_recursive(&data_dir, &cp_data);
+
+    // 4. Сохраняем метаданные гостей и чекпоинта
+    let mut guests_json = Vec::new();
+    for g in snap.guests.values() {
+        guests_json.push(serde_json::json!({
+            "uuid": format!("{:032x}", g.uuid),
+            "dimension": g.dimension,
+            "position": g.position,
+            "velocity": [g.velocity.x, g.velocity.y, g.velocity.z],
+            "yaw": g.yaw,
+            "pitch": g.pitch,
+            "head_yaw": g.head_yaw,
+            "on_ground": g.on_ground,
+            "game_mode": g.game_mode,
+            "flying": g.flying,
+            "sprinting": g.sprinting,
+            "sneaking": g.sneaking,
+            "fall_flying": g.fall_flying,
+            "health": g.health,
+            "absorption": g.absorption,
+            "food": g.food,
+            "saturation": g.saturation,
+            "exhaustion": g.exhaustion,
+            "fire_ticks": g.fire_ticks,
+            "air": g.air,
+            "ticks_frozen": g.ticks_frozen,
+            "fall_distance": g.fall_distance,
+            "xp_level": g.xp_level,
+            "xp_progress": g.xp_progress,
+            "xp_total": g.xp_total,
+            "xp_seed": g.xp_seed,
+            "selected": g.selected,
+            "seen_credits": g.seen_credits,
+        }));
+    }
+
+    let regions_list: Vec<String> = snap
+        .region_files
+        .iter()
+        .filter_map(|p| {
+            p.strip_prefix(world_root)
+                .ok()
+                .map(|rel| rel.to_string_lossy().to_string())
+        })
+        .collect();
+
+    let anchors_list: Vec<String> = snap
+        .anchor_ids
+        .iter()
+        .map(|u| format!("{:032x}", u))
+        .collect();
+
+    let meta = serde_json::json!({
+        "game_time": snap.game_time,
+        "day_time": snap.day_time,
+        "difficulty": snap.difficulty,
+        "difficulty_locked": snap.difficulty_locked,
+        "world_spawn": snap.world_spawn,
+        "world_spawn_angle": snap.world_spawn_angle,
+        "next_entity": snap.next_entity,
+        "anchor_ids": anchors_list,
+        "region_files": regions_list,
+        "guests": guests_json,
+    });
+
+    if let Ok(json_str) = serde_json::to_string_pretty(&meta) {
+        let _ = fs::write(cp_dir.join("meta.json"), json_str);
+    }
+
+    true
+}
+
+pub fn restore_disk_files_on_rollback(world_root: &Path) {
+    let cp_dir = checkpoint_dir(world_root);
+    let cp_players = cp_dir.join("players");
+    let target_players = world_root.join("players");
+    if cp_players.is_dir() {
+        copy_dir_recursive(&cp_players, &target_players);
+    }
+    let cp_data = cp_dir.join("data");
+    let target_data = world_root.join("data");
+    if cp_data.is_dir() {
+        copy_dir_recursive(&cp_data, &target_data);
+    }
+}
+
+pub fn load_checkpoint_from_disk(world_root: &Path) -> Option<TimelineSnapshot> {
+    let cp_dir = checkpoint_dir(world_root);
+    let meta_file = cp_dir.join("meta.json");
+    let meta_str = fs::read_to_string(meta_file).ok()?;
+    let meta: serde_json::Value = serde_json::from_str(&meta_str).ok()?;
+
+    let game_time = meta["game_time"].as_i64()?;
+    let day_time = meta["day_time"].as_i64().unwrap_or(game_time);
+    let difficulty = meta["difficulty"].as_u64().unwrap_or(2) as u8;
+    let difficulty_locked = meta["difficulty_locked"].as_bool().unwrap_or(false);
+    let next_entity = meta["next_entity"].as_u64().unwrap_or(100) as u32;
+
+    let world_spawn = meta["world_spawn"].as_array().and_then(|arr| {
+        if arr.len() == 3 {
+            Some([
+                arr[0].as_i64()? as i32,
+                arr[1].as_i64()? as i32,
+                arr[2].as_i64()? as i32,
+            ])
+        } else {
+            None
+        }
+    });
+
+    let world_spawn_angle = meta["world_spawn_angle"].as_array().map_or([0.0, 0.0], |arr| {
+        if arr.len() == 2 {
+            [
+                arr[0].as_f64().unwrap_or(0.0) as f32,
+                arr[1].as_f64().unwrap_or(0.0) as f32,
+            ]
+        } else {
+            [0.0, 0.0]
+        }
+    });
+
+    let mut anchor_ids = HashSet::new();
+    if let Some(arr) = meta["anchor_ids"].as_array() {
+        for v in arr {
+            if let Some(s) = v.as_str() {
+                if let Ok(u) = u128::from_str_radix(s, 16) {
+                    anchor_ids.insert(u);
+                }
+            }
+        }
+    }
+
+    let mut region_files = HashSet::new();
+    if let Some(arr) = meta["region_files"].as_array() {
+        for v in arr {
+            if let Some(s) = v.as_str() {
+                region_files.insert(world_root.join(s));
+            }
+        }
+    }
+
+    let mut offline_player_data = HashMap::new();
+    let cp_players = cp_dir.join("players");
+    collect_files_recursive(&cp_players, &mut offline_player_data, &world_root.join("players"), Path::new(""));
+
+    let mut guests = HashMap::new();
+    if let Some(g_arr) = meta["guests"].as_array() {
+        for g_val in g_arr {
+            let uuid_str = g_val["uuid"].as_str().unwrap_or("");
+            let uuid = u128::from_str_radix(uuid_str, 16).unwrap_or(0);
+            if uuid == 0 {
+                continue;
+            }
+
+            let pos = g_val["position"].as_array().map_or([0.0, 65.0, 0.0], |arr| {
+                [
+                    arr.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    arr.get(1).and_then(|v| v.as_f64()).unwrap_or(65.0),
+                    arr.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                ]
+            });
+
+            let vel = g_val["velocity"].as_array().map_or(Vec3::ZERO, |arr| {
+                Vec3::new(
+                    arr.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    arr.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                    arr.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0),
+                )
+            });
+
+            // Ищем dat файл игрока: сначала по 32-hex, потом по обычному UUID дефисному представлению
+            let player_dat_hex = cp_players.join("data").join(format!("{:032x}.dat", uuid));
+            let player_dat_std = cp_players.join("data").join(format!("{}.dat", format_uuid_std(uuid)));
+            let player_dat = if player_dat_hex.is_file() {
+                player_dat_hex
+            } else {
+                player_dat_std
+            };
+            let player_tag = read_dat(&player_dat);
+
+            let mut guest_snap = GuestSnapshot {
+                uuid,
+                dimension: g_val["dimension"]
+                    .as_str()
+                    .unwrap_or("minecraft:overworld")
+                    .to_owned(),
+                position: pos,
+                velocity: vel,
+                yaw: g_val["yaw"].as_f64().unwrap_or(0.0) as f32,
+                pitch: g_val["pitch"].as_f64().unwrap_or(0.0) as f32,
+                head_yaw: g_val["head_yaw"].as_f64().unwrap_or(0.0) as f32,
+                on_ground: g_val["on_ground"].as_bool().unwrap_or(true),
+                game_mode: g_val["game_mode"].as_i64().unwrap_or(0) as i32,
+                flying: g_val["flying"].as_bool().unwrap_or(false),
+                sprinting: g_val["sprinting"].as_bool().unwrap_or(false),
+                sneaking: g_val["sneaking"].as_bool().unwrap_or(false),
+                fall_flying: g_val["fall_flying"].as_bool().unwrap_or(false),
+                sleeping: false,
+                bed: None,
+                sleep_timer: 0,
+                vehicle: None,
+                vehicle_good: None,
+                spawn: None,
+                respawn_elsewhere: None,
+                last_death: None,
+                health: g_val["health"].as_f64().unwrap_or(20.0) as f32,
+                absorption: g_val["absorption"].as_f64().unwrap_or(0.0) as f32,
+                food: g_val["food"].as_i64().unwrap_or(20) as i32,
+                saturation: g_val["saturation"].as_f64().unwrap_or(5.0) as f32,
+                exhaustion: g_val["exhaustion"].as_f64().unwrap_or(0.0) as f32,
+                fire_ticks: g_val["fire_ticks"].as_i64().unwrap_or(-20) as i32,
+                air: g_val["air"].as_i64().unwrap_or(300) as i32,
+                ticks_frozen: g_val["ticks_frozen"].as_i64().unwrap_or(0) as i32,
+                fall_distance: g_val["fall_distance"].as_f64().unwrap_or(0.0),
+                xp_level: g_val["xp_level"].as_i64().unwrap_or(0) as i32,
+                xp_progress: g_val["xp_progress"].as_f64().unwrap_or(0.0) as f32,
+                xp_total: g_val["xp_total"].as_i64().unwrap_or(0) as i32,
+                xp_seed: g_val["xp_seed"].as_i64().unwrap_or(0) as i32,
+                inventory: vec![None; 36],
+                armor: [None, None, None, None],
+                offhand: None,
+                carried: None,
+                ender_items: vec![None; 27],
+                selected: g_val["selected"].as_u64().unwrap_or(0) as usize,
+                craft_grid: [None, None, None, None],
+                craft_result: None,
+                effects: Vec::new(),
+                shield_cooldown: 0,
+                cooldowns: Cooldowns::default(),
+                recipe_book: RecipeBookSettings::default(),
+                advancements: horizon_client::advancements::Progress::default(),
+                stats: BTreeMap::new(),
+                seen_credits: g_val["seen_credits"].as_bool().unwrap_or(false),
+                saved: player_tag.clone(),
+            };
+
+            // Считываем инвентарь и эндер-сундук из player_tag
+            if let Some(tag) = &player_tag {
+                if let Some(Tag::List(items)) = tag.get("Inventory") {
+                    for it in items {
+                        let slot = it
+                            .get("Slot")
+                            .and_then(|v| match v {
+                                Tag::Byte(b) => Some(*b as i16),
+                                Tag::Short(s) => Some(*s),
+                                Tag::Int(i) => Some(*i as i16),
+                                _ => None,
+                            })
+                            .unwrap_or(0);
+                        if let Some(stack) = item_from_nbt(it) {
+                            match slot {
+                                0..=35 => guest_snap.inventory[slot as usize] = Some(stack),
+                                100 => guest_snap.armor[3] = Some(stack),
+                                101 => guest_snap.armor[2] = Some(stack),
+                                102 => guest_snap.armor[1] = Some(stack),
+                                103 => guest_snap.armor[0] = Some(stack),
+                                -106 | 150 => guest_snap.offhand = Some(stack),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                if let Some(Tag::List(ender)) = tag.get("EnderItems") {
+                    for it in ender {
+                        let slot = it
+                            .get("Slot")
+                            .and_then(|v| match v {
+                                Tag::Byte(b) => Some(*b as usize),
+                                Tag::Short(s) => Some(*s as usize),
+                                Tag::Int(i) => Some(*i as usize),
+                                _ => None,
+                            })
+                            .unwrap_or(0);
+                        if slot < guest_snap.ender_items.len() {
+                            if let Some(stack) = item_from_nbt(it) {
+                                guest_snap.ender_items[slot] = Some(stack);
+                            }
+                        }
+                    }
+                }
+            }
+
+            guests.insert(uuid, guest_snap);
+        }
+    }
+
+    Some(TimelineSnapshot {
+        anchor_ids,
+        policy: RollbackPolicy::default(),
+        game_time,
+        day_time,
+        weather: Weather::default(),
+        health_rules: HealthRules::default(),
+        rules: horizon_client::gamerules::GameRules::default(),
+        border: WorldBorder::default(),
+        bossbars: Tag::Compound(Default::default()),
+        sculk_tracker: horizon_client::sculk::WardenSpawnTracker::default(),
+        sculk_darkness: (0.0, 0.0),
+        dragon_fight_dat: None,
+        trader_dat: None,
+        rand_sequences: horizon_client::random_sequences::RandomSequences::default(),
+        region_files,
+        difficulty,
+        difficulty_locked,
+        world_spawn,
+        world_spawn_angle,
+        next_entity,
+        scoreboard: horizon_client::scoreboard::Scoreboard::default(),
+        guests,
+        offline_player_data,
+        levels: HashMap::new(),
+    })
+}
+
+fn format_uuid_std(u: u128) -> String {
+    let hex = format!("{:032x}", u);
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    )
 }
 
 // ============================================================================
@@ -2487,9 +2897,23 @@ pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
     match phase {
         WorldPhase::WorldOpenReady => {
             load_saved_settings(game);
-            clear_snapshot();
+            let has_disk_cp = has_disk_checkpoint(&game.world_root);
+            if has_disk_cp {
+                if get_snapshot_clone().is_none() {
+                    if let Some(snap) = load_checkpoint_from_disk(&game.world_root) {
+                        set_snapshot(Some(snap));
+                    }
+                }
+                with_state_mut(|st| {
+                    st.has_checkpoint = true;
+                });
+            } else {
+                clear_snapshot();
+                with_state_mut(|st| {
+                    st.has_checkpoint = false;
+                });
+            }
             with_state_mut(|st| {
-                st.has_checkpoint = false;
                 st.anchor_ids.clear();
                 st.pending_death_rollback = None;
                 st.last_save_tick = game.world.game_time;
@@ -2504,10 +2928,7 @@ pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
         WorldPhase::WorldCloseFinal
         | WorldPhase::WorldCloseFailed
         | WorldPhase::WorldOpenFailed => {
-            clear_snapshot();
             with_state_mut(|st| {
-                st.has_checkpoint = false;
-                st.anchor_ids.clear();
                 st.pending_death_rollback = None;
             });
         }

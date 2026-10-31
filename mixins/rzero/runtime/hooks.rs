@@ -4,6 +4,7 @@ use super::super::{
 };
 use super::adaptive::tick_autosave_on_server;
 use super::capture::create_checkpoint_on_server;
+use super::persistence::{has_disk_checkpoint, load_checkpoint_from_disk};
 use super::restore::rollback_checkpoint_on_server;
 use super::snapshots::*;
 use super::types::*;
@@ -64,9 +65,23 @@ pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
     match phase {
         WorldPhase::WorldOpenReady => {
             load_saved_settings(game);
-            clear_snapshot();
+            let has_disk_cp = has_disk_checkpoint(&game.world_root);
+            if has_disk_cp {
+                if get_snapshot_clone().is_none() {
+                    if let Some(snap) = load_checkpoint_from_disk(&game.world_root) {
+                        set_snapshot(Some(snap));
+                    }
+                }
+                with_state_mut(|st| {
+                    st.has_checkpoint = true;
+                });
+            } else {
+                clear_snapshot();
+                with_state_mut(|st| {
+                    st.has_checkpoint = false;
+                });
+            }
             with_state_mut(|st| {
-                st.has_checkpoint = false;
                 st.anchor_ids.clear();
                 st.pending_death_rollback = None;
                 st.last_save_tick = game.world.game_time;
@@ -81,10 +96,7 @@ pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
         WorldPhase::WorldCloseFinal
         | WorldPhase::WorldCloseFailed
         | WorldPhase::WorldOpenFailed => {
-            clear_snapshot();
             with_state_mut(|st| {
-                st.has_checkpoint = false;
-                st.anchor_ids.clear();
                 st.pending_death_rollback = None;
             });
         }

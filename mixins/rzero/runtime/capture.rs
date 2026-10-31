@@ -1,6 +1,7 @@
 use super::super::{
     Dim, Game,
 };
+use super::persistence::save_checkpoint_to_disk;
 use super::snapshots::*;
 use super::types::*;
 use horizon_client::{
@@ -322,5 +323,6 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         levels,
     };
 
+    save_checkpoint_to_disk(&game.world_root, &timeline);
     set_snapshot(Some(timeline));
 }

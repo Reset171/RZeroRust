@@ -1,6 +1,7 @@
 use super::super::{
     Dim, Game,
 };
+use super::persistence::{load_checkpoint_from_disk, restore_disk_files_on_rollback};
 use super::snapshots::*;
 use super::types::*;
 use horizon_client::{
@@ -272,9 +273,17 @@ pub fn apply_level_snapshot_in_place(
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
-    let Some(snap) = get_snapshot_clone() else {
-        return false;
+    let snap = match get_snapshot_clone() {
+        Some(s) => s,
+        None => match load_checkpoint_from_disk(&game.world_root) {
+            Some(s) => {
+                set_snapshot(Some(s.clone()));
+                s
+            }
+            None => return false,
+        },
     };
+    restore_disk_files_on_rollback(&game.world_root);
     let policy = &snap.policy;
 
     if policy.world_time {
