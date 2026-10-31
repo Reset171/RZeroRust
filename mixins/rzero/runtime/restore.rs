@@ -538,6 +538,17 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                 g.death_time = 0;
                 g.sent_health = None;
                 g.sent_xp = None;
+                g.awaiting_teleport = None;
+                g.send(&C::SetHealth(play::SetHealth {
+                    health: g.health,
+                    food: g.food,
+                    saturation: g.saturation,
+                }));
+                g.send(&C::PlayerAbilities(play::PlayerAbilities {
+                    flags: g.ability_flags(),
+                    flying_speed: 0.05,
+                    walking_speed: 0.1,
+                }));
                 g.seen_credits = gs.seen_credits;
                 g.saved = gs.saved.clone();
                 g.loaded_body = Some(SavedBody {
@@ -546,6 +557,10 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
                     fall_distance: gs.fall_distance,
                 });
                 if let Some(m) = g.motion.as_mut() {
+                    let is_invuln = gs.game_mode == 1 || gs.game_mode == 3;
+                    m.invulnerable = is_invuln;
+                    m.may_fly = is_invuln;
+                    m.flying = gs.flying;
                     if policy.player_position {
                         m.position = Vec3::new(gs.position[0], gs.position[1], gs.position[2]);
                         m.yaw = gs.yaw;
@@ -627,8 +642,15 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
         game.lan = Some(host);
     }
 
-    if let Some(p) = game.player.as_mut() {
-        if let Some(gs) = snap.guests.values().next() {
+    if let Some(gs) = snap.guests.values().next() {
+        let is_invuln = gs.game_mode == 1 || gs.game_mode == 3;
+        game.set_mode_id(gs.game_mode);
+        if let Some(p) = game.player.as_mut() {
+            let _ = p.set_health(gs.health.max(1.0), false);
+            p.invulnerable = is_invuln;
+            p.may_fly = is_invuln;
+            p.flying = gs.flying;
+            p.fall_distance = 0.0;
             p.ticks_frozen = gs.ticks_frozen;
         }
     }

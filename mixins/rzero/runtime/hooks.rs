@@ -103,6 +103,13 @@ pub fn handle_tick(game: &mut Game<'_>) {
             game.ui.death_time = 0;
             game.ui.died_at = None;
             game.ui.death_confirm = None;
+            if let Some(p) = game.player.as_mut() {
+                let _ = p.set_health(20.0, false);
+                p.invulnerable = false;
+                p.may_fly = false;
+                p.flying = false;
+                p.fall_distance = 0.0;
+            }
             if let Some(server) = &game.integrated {
                 server.call(|srv| {
                     rollback_checkpoint_on_server(srv);
