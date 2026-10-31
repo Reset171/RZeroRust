@@ -118,10 +118,22 @@ pub fn handle_tick(game: &mut Game<'_>) {
             game.boss_overlay.reset();
             if let Some(p) = game.player.as_mut() {
                 let _ = p.set_health(20.0, false);
+                p.health.dead = false;
                 p.invulnerable = false;
                 p.may_fly = false;
+                p.spectator = false;
                 p.flying = false;
                 p.fall_distance = 0.0;
+                p.health.hurt.no_action_time = 0;
+                p.health.hurt.cooldown = 0;
+                p.health.hurt.last_hurt = 0.0;
+                p.health.hurt.hurt_duration = 0;
+                p.health.hurt.hurt_time = 0;
+                p.health.hurt.last_source = None;
+                p.health.hurt.last_stamp = 0;
+                p.health.hurt_animation_time = 0;
+                p.health.hurt_dir = 0.0;
+                p.health.indicated_dir = None;
             }
             if let Some(server) = &game.integrated {
                 server.call(|srv| {
@@ -212,6 +224,22 @@ pub fn intercept_guest_die(
     g.death_time = 0;
     g.sent_health = None;
     if let Some(m) = g.motion.as_mut() {
+        m.health.dead = false;
+        m.invulnerable = false;
+        m.may_fly = false;
+        m.spectator = false;
+        m.flying = false;
+        m.fall_distance = 0.0;
+        m.health.hurt.no_action_time = 0;
+        m.health.hurt.cooldown = 0;
+        m.health.hurt.last_hurt = 0.0;
+        m.health.hurt.hurt_duration = 0;
+        m.health.hurt.hurt_time = 0;
+        m.health.hurt.last_source = None;
+        m.health.hurt.last_stamp = 0;
+        m.health.hurt_animation_time = 0;
+        m.health.hurt_dir = 0.0;
+        m.health.indicated_dir = None;
         let _ = m.set_health(20.0, false);
     }
     ControlFlow::Break(())

@@ -35,6 +35,7 @@ from tools.tests.test_mobs_ai import (
 from tools.tests.test_death_rewind import (
     test_9_return_by_death_fatal_fall,
     test_10_multiple_fall_cycles,
+    test_18_drowning_and_damage_after_rewind,
 )
 from tools.tests.test_slots import test_11_slots_branching
 from tools.tests.test_policies import test_12_policy_selective_inventory
@@ -98,6 +99,7 @@ def build_test_catalog():
         (15, "Test 15: Piston and Redstone State Rollback", "containers", test_15_piston_redstone_machine),
         (16, "Test 16: Flying Projectile Arrow Determinism", "vehicles", test_16_flying_arrow_projectile),
         (17, "Test 17: End Dragon Bossbar Cross-Dimension Rollback", "dimensions", test_17_end_dragon_bossbar_rollback),
+        (18, "Test 18: Drowning and Damage After Rewind", "death", test_18_drowning_and_damage_after_rewind),
     ]
 
 

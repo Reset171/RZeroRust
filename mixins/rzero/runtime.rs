@@ -1948,6 +1948,10 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                     food: g.food,
                     saturation: g.saturation,
                 }));
+                g.send(&C::GameEvent(play::GameEvent {
+                    event: 3,
+                    param: gs.game_mode as f32,
+                }));
                 g.send(&C::PlayerAbilities(play::PlayerAbilities {
                     flags: g.ability_flags(),
                     flying_speed: 0.05,
@@ -1962,9 +1966,22 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                 });
                 if let Some(m) = g.motion.as_mut() {
                     let is_invuln = gs.game_mode == 1 || gs.game_mode == 3;
+                    let is_spectator = gs.game_mode == 3;
+                    m.health.dead = false;
                     m.invulnerable = is_invuln;
                     m.may_fly = is_invuln;
+                    m.spectator = is_spectator;
                     m.flying = gs.flying;
+                    m.health.hurt.no_action_time = 0;
+                    m.health.hurt.cooldown = 0;
+                    m.health.hurt.last_hurt = 0.0;
+                    m.health.hurt.hurt_duration = 0;
+                    m.health.hurt.hurt_time = 0;
+                    m.health.hurt.last_source = None;
+                    m.health.hurt.last_stamp = 0;
+                    m.health.hurt_animation_time = 0;
+                    m.health.hurt_dir = 0.0;
+                    m.health.indicated_dir = None;
                     if policy.player_position {
                         m.position = Vec3::new(gs.position[0], gs.position[1], gs.position[2]);
                         m.yaw = gs.yaw;
@@ -2076,17 +2093,34 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
 
     if let Some(gs) = snap.guests.values().next() {
         let is_invuln = gs.game_mode == 1 || gs.game_mode == 3;
+        let is_spectator = gs.game_mode == 3;
         game.set_mode_id(gs.game_mode);
         if let Some(p) = game.player.as_mut() {
             let _ = p.set_health(gs.health.max(1.0), false);
+            p.health.dead = false;
             p.invulnerable = is_invuln;
             p.may_fly = is_invuln;
+            p.spectator = is_spectator;
             p.flying = gs.flying;
             p.fall_distance = 0.0;
             p.ticks_frozen = gs.ticks_frozen;
+            p.health.hurt.no_action_time = 0;
+            p.health.hurt.cooldown = 0;
+            p.health.hurt.last_hurt = 0.0;
+            p.health.hurt.hurt_duration = 0;
+            p.health.hurt.hurt_time = 0;
+            p.health.hurt.last_source = None;
+            p.health.hurt.last_stamp = 0;
+            p.health.hurt_animation_time = 0;
+            p.health.hurt_dir = 0.0;
+            p.health.indicated_dir = None;
         }
     }
 
+    game.ui.death_time = 0;
+    game.ui.died_at = None;
+    game.ui.death_confirm = None;
+    game.screen = super::super::Screen::Playing;
     game.boss_overlay.reset();
     if policy.server_bossbars {
         game.publish_boss_bars();
@@ -3543,10 +3577,22 @@ pub fn handle_tick(game: &mut Game<'_>) {
             game.boss_overlay.reset();
             if let Some(p) = game.player.as_mut() {
                 let _ = p.set_health(20.0, false);
+                p.health.dead = false;
                 p.invulnerable = false;
                 p.may_fly = false;
+                p.spectator = false;
                 p.flying = false;
                 p.fall_distance = 0.0;
+                p.health.hurt.no_action_time = 0;
+                p.health.hurt.cooldown = 0;
+                p.health.hurt.last_hurt = 0.0;
+                p.health.hurt.hurt_duration = 0;
+                p.health.hurt.hurt_time = 0;
+                p.health.hurt.last_source = None;
+                p.health.hurt.last_stamp = 0;
+                p.health.hurt_animation_time = 0;
+                p.health.hurt_dir = 0.0;
+                p.health.indicated_dir = None;
             }
             if let Some(server) = &game.integrated {
                 server.call(|srv| {
@@ -3637,6 +3683,22 @@ pub fn intercept_guest_die(
     g.death_time = 0;
     g.sent_health = None;
     if let Some(m) = g.motion.as_mut() {
+        m.health.dead = false;
+        m.invulnerable = false;
+        m.may_fly = false;
+        m.spectator = false;
+        m.flying = false;
+        m.fall_distance = 0.0;
+        m.health.hurt.no_action_time = 0;
+        m.health.hurt.cooldown = 0;
+        m.health.hurt.last_hurt = 0.0;
+        m.health.hurt.hurt_duration = 0;
+        m.health.hurt.hurt_time = 0;
+        m.health.hurt.last_source = None;
+        m.health.hurt.last_stamp = 0;
+        m.health.hurt_animation_time = 0;
+        m.health.hurt_dir = 0.0;
+        m.health.indicated_dir = None;
         let _ = m.set_health(20.0, false);
     }
     ControlFlow::Break(())
