@@ -1,6 +1,8 @@
 use super::super::{Game, LanHost};
 use super::capture::*;
+use super::persistence::*;
 use super::restore::*;
+use super::snapshots::*;
 use super::types::*;
 use super::ui::save_current_settings;
 use horizon_protocol::{
@@ -17,26 +19,293 @@ pub fn execute_rzero_command(
     let words: Vec<&str> = command.split_whitespace().collect();
     let sub = words.get(1).copied().unwrap_or("status");
     let reply = match sub {
-        "set" | "save" => {
-            create_checkpoint_on_server(game, requester);
-            "[RZero] Checkpoint created successfully.".to_owned()
-        }
-        "load" | "rollback" => {
-            if rollback_checkpoint_on_server(game) {
-                format!(
-                    "[RZero] Timeline rolled back to checkpoint (tick={}).",
-                    game.world.game_time
-                )
+        "json" => report_status_json(game),
+        "status" => {
+            if words.get(2).copied() == Some("--json") {
+                report_status_json(game)
             } else {
-                "[RZero] Rollback aborted: No timeline origin found.".to_owned()
+                report_status(game)
             }
         }
-        "status" => report_status(game),
+        "set" | "save" => {
+            let slot = words.get(2).copied().unwrap_or("default");
+            create_slot_checkpoint_on_server(game, requester, slot);
+            with_state_mut(|st| st.current_slot = slot.to_owned());
+            format!("[RZero] Checkpoint saved to slot '{}' successfully.", slot)
+        }
+        "load" | "rollback" => {
+            let slot = words.get(2).copied().unwrap_or("default");
+            if rollback_slot_checkpoint_on_server(game, slot) {
+                with_state_mut(|st| st.current_slot = slot.to_owned());
+                format!(
+                    "[RZero] Timeline rolled back to slot '{}' (tick={}).",
+                    slot, game.world.game_time
+                )
+            } else {
+                format!("[RZero] Rollback aborted: No timeline origin found for slot '{}'.", slot)
+            }
+        }
+        "slot" | "slots" => handle_slot_subcommand(game, &words[2..], requester),
+        "policy" => handle_policy_subcommand(game, &words[2..]),
+        "metrics" => report_metrics_json(game),
+        "rewind" => {
+            let slot = words.get(2).copied().unwrap_or("default");
+            if rollback_slot_checkpoint_on_server(game, slot) {
+                format!("[RZero] Immediate rewind executed to slot '{}'.", slot)
+            } else {
+                format!("[RZero] Rewind failed: Slot '{}' not found.", slot)
+            }
+        }
+        "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
         "autosave" => handle_autosave_subcommand(game, &words[2..]),
-        _ => "[RZero] Usage: /rzero <set|load|status|anchor|autosave>".to_owned(),
+        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave>".to_owned(),
     };
     vec![reply]
+}
+
+pub fn handle_slot_subcommand(
+    game: &mut Game<'_>,
+    args: &[&str],
+    requester: Option<u128>,
+) -> String {
+    let sub = args.first().copied().unwrap_or("list");
+    match sub {
+        "list" => {
+            let disk_slots = list_disk_slots(&game.world_root);
+            serde_json::to_string_pretty(&serde_json::json!({
+                "current_slot": with_state(|st| st.current_slot.clone()),
+                "slots": disk_slots,
+            }))
+            .unwrap_or_else(|_| "{}".to_owned())
+        }
+        "save" => {
+            let name = args.get(1).copied().unwrap_or("default");
+            create_slot_checkpoint_on_server(game, requester, name);
+            with_state_mut(|st| st.current_slot = name.to_owned());
+            format!("[RZero] Saved timeline to slot '{}'.", name)
+        }
+        "load" => {
+            let name = args.get(1).copied().unwrap_or("default");
+            if rollback_slot_checkpoint_on_server(game, name) {
+                with_state_mut(|st| st.current_slot = name.to_owned());
+                format!("[RZero] Rolled back to slot '{}'.", name)
+            } else {
+                format!("[RZero] Slot '{}' not found.", name)
+            }
+        }
+        "select" => {
+            let name = args.get(1).copied().unwrap_or("default");
+            with_state_mut(|st| st.current_slot = name.to_owned());
+            format!("[RZero] Active slot set to '{}'.", name)
+        }
+        "delete" => {
+            let name = args.get(1).copied().unwrap_or("");
+            if name.is_empty() || name == "default" {
+                "[RZero] Cannot delete default slot.".to_owned()
+            } else {
+                delete_slot_snapshot(name);
+                let deleted = delete_disk_slot(&game.world_root, name);
+                if deleted {
+                    format!("[RZero] Deleted slot '{}'.", name)
+                } else {
+                    format!("[RZero] Slot '{}' not found.", name)
+                }
+            }
+        }
+        _ => "[RZero] Usage: /rzero slot <list|save|load|select|delete> [name]".to_owned(),
+    }
+}
+
+pub fn handle_policy_subcommand(game: &mut Game<'_>, args: &[&str]) -> String {
+    let sub = args.first().copied().unwrap_or("get");
+    match sub {
+        "get" => {
+            let pol = with_state(|st| st.policy.to_json());
+            serde_json::to_string_pretty(&pol).unwrap_or_else(|_| "{}".to_owned())
+        }
+        "set" => {
+            let key = args.get(1).copied().unwrap_or("");
+            let val = match args.get(2).copied().unwrap_or("").to_ascii_lowercase().as_str() {
+                "true" | "1" | "on" => Some(true),
+                "false" | "0" | "off" => Some(false),
+                _ => None,
+            };
+            if key.is_empty() || val.is_none() {
+                return "[RZero] Usage: /rzero policy set <field> <true|false>".to_owned();
+            }
+            let success = with_state_mut(|st| st.policy.set_field(key, val.unwrap()));
+            if success {
+                save_current_settings(game);
+                format!("[RZero] Policy '{}' set to {}.", key, val.unwrap())
+            } else {
+                format!("[RZero] Unknown policy field '{}'.", key)
+            }
+        }
+        "reset" => {
+            with_state_mut(|st| st.policy = RollbackPolicy::default());
+            save_current_settings(game);
+            "[RZero] Rollback policy reset to deterministic standard (100% rollback).".to_owned()
+        }
+        _ => "[RZero] Usage: /rzero policy <get|set|reset> [field] [value]".to_owned(),
+    }
+}
+
+pub fn report_metrics_json(game: &Game<'_>) -> String {
+    let (intensity, peak, relax, last_boss) = with_state(|st| {
+        (
+            st.current_intensity,
+            st.peak_intensity,
+            st.relax_ticks,
+            st.last_boss_death_tick,
+        )
+    });
+
+    let (player_health, player_food) = game
+        .lan
+        .as_ref()
+        .and_then(|h| h.hub.guests.iter().find(|g| g.placed))
+        .map(|g| (g.health, g.food))
+        .unwrap_or((20.0, 20));
+
+    let threat_level = (intensity / 10.0).clamp(0.0, 1.0);
+    let is_safe = threat_level < 0.25 && player_health >= 15.0;
+
+    let rec = if threat_level > 0.7 || player_health < 6.0 {
+        "critical_danger"
+    } else if threat_level > 0.25 {
+        "combat_active"
+    } else {
+        "safe_to_save"
+    };
+
+    serde_json::to_string_pretty(&serde_json::json!({
+        "threat_level": threat_level,
+        "combat_intensity": intensity,
+        "peak_intensity": peak,
+        "relax_ticks": relax,
+        "ticks_since_boss_defeat": game.world.game_time - last_boss,
+        "player_health": player_health,
+        "player_food": player_food,
+        "safe_to_save": is_safe,
+        "recommended_action": rec,
+    }))
+    .unwrap_or_else(|_| "{}".to_owned())
+}
+
+pub fn handle_trigger_subcommand(
+    game: &mut Game<'_>,
+    args: &[&str],
+    requester: Option<u128>,
+) -> String {
+    match args.first().copied().unwrap_or("rewind") {
+        "rewind" => {
+            let slot = args.get(1).copied().unwrap_or("default");
+            if rollback_slot_checkpoint_on_server(game, slot) {
+                format!("[RZero] Triggered rewind to slot '{}'.", slot)
+            } else {
+                format!("[RZero] Trigger failed: Slot '{}' not found.", slot)
+            }
+        }
+        "checkpoint" | "save" => {
+            let slot = args.get(1).copied().unwrap_or("default");
+            create_slot_checkpoint_on_server(game, requester, slot);
+            format!("[RZero] Triggered checkpoint creation for slot '{}'.", slot)
+        }
+        _ => "[RZero] Usage: /rzero trigger <rewind|checkpoint> [slot]".to_owned(),
+    }
+}
+
+pub fn report_status_json(game: &Game<'_>) -> String {
+    let now = game.world.game_time;
+    let online: Vec<u128> = game
+        .lan
+        .as_ref()
+        .map(|h| {
+            h.hub
+                .guests
+                .iter()
+                .filter(|g| g.placed)
+                .map(|g| g.uuid)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let (
+        has_cp,
+        last_save,
+        anchor_mode,
+        cooldown_sec,
+        auto_save,
+        adaptive,
+        interval_sec,
+        intensity,
+        peak,
+        current_slot,
+    ) = with_state(|st| {
+        (
+            st.has_checkpoint,
+            st.last_save_tick,
+            st.anchor.mode.id(),
+            st.anchor.rollback_cooldown_seconds,
+            st.auto_save,
+            st.adaptive_mode,
+            st.fixed_interval_sec,
+            st.current_intensity,
+            st.peak_intensity,
+            st.current_slot.clone(),
+        )
+    });
+
+    let player_json = game
+        .lan
+        .as_ref()
+        .and_then(|h| h.hub.guests.iter().find(|g| g.placed))
+        .map(|g| {
+            serde_json::json!({
+                "uuid": format!("{:032x}", g.uuid),
+                "name": g.name,
+                "dimension": g.dimension,
+                "position": g.position,
+                "health": g.health,
+                "food": g.food,
+                "game_mode": match g.game_mode {
+                    1 => "creative",
+                    2 => "adventure",
+                    3 => "spectator",
+                    _ => "survival",
+                },
+                "on_ground": g.on_ground,
+                "flying": g.flying,
+            })
+        });
+
+    let anchors: Vec<String> = with_state(|st| {
+        resolve_anchors(&st.anchor, &online, now, None)
+            .into_iter()
+            .map(|u| format!("{:032x}", u))
+            .collect()
+    });
+
+    serde_json::to_string_pretty(&serde_json::json!({
+        "rzero_version": "0.1.0",
+        "has_checkpoint": has_cp,
+        "current_slot": current_slot,
+        "game_time": now,
+        "day_time": game.world.day_time,
+        "last_save_tick": last_save,
+        "checkpoint_age_ticks": if has_cp { now - last_save } else { -1 },
+        "anchor_mode": anchor_mode,
+        "active_anchors": anchors,
+        "rollback_cooldown_seconds": cooldown_sec,
+        "auto_save": auto_save,
+        "adaptive_mode": adaptive,
+        "fixed_interval_seconds": interval_sec,
+        "combat_intensity": intensity,
+        "peak_intensity": peak,
+        "player": player_json,
+    }))
+    .unwrap_or_else(|_| "{}".to_owned())
 }
 
 pub fn handle_anchor_subcommand(
@@ -56,26 +325,91 @@ pub fn handle_anchor_subcommand(
                 st.last_rollback_tick = None;
             });
             save_current_settings(game);
-            if seconds <= 0 {
-                "[RZero] Rollback cooldown disabled: every key player death rewinds the world."
-                    .to_owned()
+            format!("[RZero] Rollback cooldown set to {} s", seconds)
+        }
+        "rotate" | "interval" => {
+            let seconds = args
+                .get(1)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(300)
+                .max(10);
+            with_state_mut(|st| st.anchor.rotation_seconds = seconds);
+            save_current_settings(game);
+            format!("[RZero] Key player rotation interval set to {} s", seconds)
+        }
+        "pin" => {
+            let target = match args.get(1) {
+                Some(name) => {
+                    let host = game.lan.as_ref();
+                    host.and_then(|h| {
+                        h.hub
+                            .guests
+                            .iter()
+                            .find(|g| g.name.eq_ignore_ascii_case(name))
+                            .map(|g| g.uuid)
+                    })
+                }
+                None => requester,
+            };
+            if let Some(uuid) = target {
+                let added = with_state_mut(|st| {
+                    if !st.anchor.pinned.contains(&uuid) {
+                        st.anchor.pinned.push(uuid);
+                        true
+                    } else {
+                        false
+                    }
+                });
+                save_current_settings(game);
+                if added {
+                    format!("[RZero] Pinned player {:032x} as key player.", uuid)
+                } else {
+                    format!("[RZero] Player {:032x} is already pinned.", uuid)
+                }
             } else {
-                format!("[RZero] Rollback cooldown: {seconds} (in seconds)")
+                "[RZero] Player not found.".to_owned()
+            }
+        }
+        "unpin" => {
+            let target = match args.get(1) {
+                Some(name) => {
+                    let host = game.lan.as_ref();
+                    host.and_then(|h| {
+                        h.hub
+                            .guests
+                            .iter()
+                            .find(|g| g.name.eq_ignore_ascii_case(name))
+                            .map(|g| g.uuid)
+                    })
+                }
+                None => requester,
+            };
+            if let Some(uuid) = target {
+                let removed = with_state_mut(|st| {
+                    if let Some(idx) = st.anchor.pinned.iter().position(|u| *u == uuid) {
+                        st.anchor.pinned.remove(idx);
+                        true
+                    } else {
+                        false
+                    }
+                });
+                save_current_settings(game);
+                if removed {
+                    format!("[RZero] Unpinned player {:032x}.", uuid)
+                } else {
+                    format!("[RZero] Player {:032x} was not pinned.", uuid)
+                }
+            } else {
+                "[RZero] Player not found.".to_owned()
             }
         }
         "mode" => {
-            let mode = AnchorMode::by_id(args.get(1).copied().unwrap_or("fixed"));
-            let rot = args
-                .get(2)
-                .and_then(|s| s.parse::<i32>().ok())
-                .unwrap_or(300)
-                .max(5);
+            let mode_str = args.get(1).copied().unwrap_or("fixed");
+            let mode = AnchorMode::by_id(mode_str);
             with_state_mut(|st| {
                 st.anchor.mode = mode;
-                if mode == AnchorMode::Rotating {
-                    st.anchor.rotation_seconds = rot;
-                }
-                if matches!(mode, AnchorMode::Fixed | AnchorMode::Multi)
+                if mode == AnchorMode::Fixed
+                    && st.anchor.pinned.is_empty()
                     && let Some(req) = requester
                 {
                     st.anchor.pinned = vec![req];
@@ -160,7 +494,8 @@ pub fn report_status(game: &Game<'_>) -> String {
             )
         };
         format!(
-            "[RZero] Key player mode: {} | rollback cooldown: {} | active key players: {} | has_checkpoint: {}",
+            "[RZero] Slot: {} | Key player mode: {} | rollback cooldown: {} | active key players: {} | has_checkpoint: {}",
+            st.current_slot,
             st.anchor.mode.id(),
             cd_text,
             anchors.len(),
@@ -186,7 +521,11 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
     let is_rollback = trimmed == "rzero load"
         || trimmed.starts_with("rzero load ")
         || trimmed == "rzero rollback"
-        || trimmed.starts_with("rzero rollback ");
+        || trimmed.starts_with("rzero rollback ")
+        || trimmed == "rzero rewind"
+        || trimmed.starts_with("rzero rewind ")
+        || trimmed.starts_with("rzero slot load ")
+        || trimmed.starts_with("rzero trigger rewind");
     if is_rollback {
         game.close_container();
         game.screen = super::super::Screen::Playing;
@@ -246,23 +585,14 @@ pub fn intercept_guest_command(
         return ControlFlow::Continue(());
     }
     let requester = host.hub.guest(conn).map(|g| g.uuid);
-    game.lan = Some(std::mem::replace(host, empty_lan_placeholder()));
     let lines = execute_rzero_command(game, requester, trimmed);
-    if let Some(restored_host) = game.lan.take() {
-        *host = restored_host;
-    }
-    for line in lines {
-        host.hub.send_to(
-            conn,
-            &C::SystemChat(play::SystemChat {
+    if let Some(g) = host.hub.guest(conn) {
+        for line in lines {
+            g.send(&C::SystemChat(play::SystemChat {
                 content: literal(&line),
                 overlay: false,
-            }),
-        );
+            }));
+        }
     }
     ControlFlow::Break(())
-}
-
-pub fn empty_lan_placeholder() -> LanHost {
-    unreachable!("game.lan is always restored")
 }

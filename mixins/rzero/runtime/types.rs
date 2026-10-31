@@ -145,7 +145,93 @@ impl Default for RollbackPolicy {
     }
 }
 
+impl RollbackPolicy {
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "blocks": self.blocks,
+            "biomes": self.biomes,
+            "block_entities": self.block_entities,
+            "block_ticks": self.block_ticks,
+            "fluid_ticks": self.fluid_ticks,
+            "block_events": self.block_events,
+            "entities_presence": self.entities_presence,
+            "dropped_items": self.dropped_items,
+            "experience_orbs": self.experience_orbs,
+            "player_position": self.player_position,
+            "player_motion": self.player_motion,
+            "player_health": self.player_health,
+            "player_hunger": self.player_hunger,
+            "player_experience": self.player_experience,
+            "player_inventory": self.player_inventory,
+            "player_ender_chest": self.player_ender_chest,
+            "player_potion_effects": self.player_potion_effects,
+            "player_cooldowns": self.player_cooldowns,
+            "player_abilities": self.player_abilities,
+            "player_recipe_book": self.player_recipe_book,
+            "player_spawn_point": self.player_spawn_point,
+            "player_stats": self.player_stats,
+            "preserve_new_player_inventory": self.preserve_new_player_inventory,
+            "world_time": self.world_time,
+            "world_weather": self.world_weather,
+            "world_raids": self.world_raids,
+            "world_dragon_fight": self.world_dragon_fight,
+            "world_scoreboard": self.world_scoreboard,
+            "world_level_rng": self.world_level_rng,
+            "world_difficulty": self.world_difficulty,
+            "world_spawn": self.world_spawn,
+            "server_bossbars": self.server_bossbars,
+            "server_forced_chunks": self.server_forced_chunks,
+            "server_world_border": self.server_world_border,
+            "server_game_rules": self.server_game_rules,
+        })
+    }
+
+    pub fn set_field(&mut self, key: &str, val: bool) -> bool {
+        let norm = key.trim().to_ascii_lowercase().replace('.', "_");
+        match norm.as_str() {
+            "blocks" => self.blocks = val,
+            "biomes" => self.biomes = val,
+            "block_entities" => self.block_entities = val,
+            "block_ticks" => self.block_ticks = val,
+            "fluid_ticks" => self.fluid_ticks = val,
+            "block_events" => self.block_events = val,
+            "entities_presence" | "entities" => self.entities_presence = val,
+            "dropped_items" => self.dropped_items = val,
+            "experience_orbs" => self.experience_orbs = val,
+            "player_position" | "position" => self.player_position = val,
+            "player_motion" | "motion" => self.player_motion = val,
+            "player_health" | "health" => self.player_health = val,
+            "player_hunger" | "hunger" => self.player_hunger = val,
+            "player_experience" | "experience" | "xp" => self.player_experience = val,
+            "player_inventory" | "inventory" => self.player_inventory = val,
+            "player_ender_chest" | "ender_chest" => self.player_ender_chest = val,
+            "player_potion_effects" | "effects" => self.player_potion_effects = val,
+            "player_cooldowns" | "cooldowns" => self.player_cooldowns = val,
+            "player_abilities" | "abilities" => self.player_abilities = val,
+            "player_recipe_book" | "recipe_book" => self.player_recipe_book = val,
+            "player_spawn_point" | "spawn_point" => self.player_spawn_point = val,
+            "player_stats" | "stats" => self.player_stats = val,
+            "preserve_new_player_inventory" => self.preserve_new_player_inventory = val,
+            "world_time" | "time" => self.world_time = val,
+            "world_weather" | "weather" => self.world_weather = val,
+            "world_raids" | "raids" => self.world_raids = val,
+            "world_dragon_fight" | "dragon_fight" => self.world_dragon_fight = val,
+            "world_scoreboard" | "scoreboard" => self.world_scoreboard = val,
+            "world_level_rng" | "level_rng" | "rng" => self.world_level_rng = val,
+            "world_difficulty" | "difficulty" => self.world_difficulty = val,
+            "world_spawn" | "spawn" => self.world_spawn = val,
+            "server_bossbars" | "bossbars" => self.server_bossbars = val,
+            "server_forced_chunks" | "forced_chunks" => self.server_forced_chunks = val,
+            "server_world_border" | "world_border" | "border" => self.server_world_border = val,
+            "server_game_rules" | "game_rules" | "rules" => self.server_game_rules = val,
+            _ => return false,
+        }
+        true
+    }
+}
+
 pub struct RZeroState {
+    pub current_slot: String,
     pub auto_save: bool,
     pub adaptive_mode: bool,
     pub use_random_interval: bool,
@@ -178,6 +264,7 @@ pub struct RZeroState {
 impl Default for RZeroState {
     fn default() -> Self {
         Self {
+            current_slot: "default".to_owned(),
             auto_save: true,
             adaptive_mode: false,
             use_random_interval: false,

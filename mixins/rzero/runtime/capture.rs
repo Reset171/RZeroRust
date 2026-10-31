@@ -1,7 +1,7 @@
 use super::super::{
     Dim, Game,
 };
-use super::persistence::save_checkpoint_to_disk;
+use super::persistence::{save_checkpoint_to_disk, save_slot_to_disk};
 use super::snapshots::*;
 use super::types::*;
 use horizon_client::{
@@ -145,6 +145,10 @@ pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::Parked) -
 }
 
 pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>) {
+    create_slot_checkpoint_on_server(game, requester, "default");
+}
+
+pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>, slot: &str) {
     game.save_raids();
     game.save_fight();
     game.save_wandering_trader();
@@ -323,6 +327,6 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
         levels,
     };
 
-    save_checkpoint_to_disk(&game.world_root, &timeline);
-    set_snapshot(Some(timeline));
+    save_slot_to_disk(&game.world_root, slot, &timeline);
+    set_slot_snapshot(slot, timeline);
 }

@@ -17,12 +17,25 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub fn slot_dir(world_root: &Path, slot: &str) -> PathBuf {
+    let clean = slot.trim();
+    if clean.is_empty() || clean == "default" {
+        world_root.join("rzero").join("checkpoint")
+    } else {
+        world_root.join("rzero").join("slots").join(clean)
+    }
+}
+
 pub fn checkpoint_dir(world_root: &Path) -> PathBuf {
-    world_root.join("rzero").join("checkpoint")
+    slot_dir(world_root, "default")
 }
 
 pub fn has_disk_checkpoint(world_root: &Path) -> bool {
-    checkpoint_dir(world_root).join("meta.json").is_file()
+    has_disk_slot(world_root, "default")
+}
+
+pub fn has_disk_slot(world_root: &Path, slot: &str) -> bool {
+    slot_dir(world_root, slot).join("meta.json").is_file()
 }
 
 pub fn copy_dir_recursive(src: &Path, dst: &Path) {
@@ -65,8 +78,8 @@ pub fn collect_files_recursive(
     }
 }
 
-pub fn save_checkpoint_to_disk(world_root: &Path, snap: &TimelineSnapshot) -> bool {
-    let cp_dir = checkpoint_dir(world_root);
+pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot) -> bool {
+    let cp_dir = slot_dir(world_root, slot);
     if fs::create_dir_all(&cp_dir).is_err() {
         return false;
     }
@@ -139,6 +152,8 @@ pub fn save_checkpoint_to_disk(world_root: &Path, snap: &TimelineSnapshot) -> bo
         .collect();
 
     let meta = serde_json::json!({
+        "slot": slot,
+        "saved_at_unix": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
         "game_time": snap.game_time,
         "day_time": snap.day_time,
         "difficulty": snap.difficulty,
@@ -146,6 +161,7 @@ pub fn save_checkpoint_to_disk(world_root: &Path, snap: &TimelineSnapshot) -> bo
         "world_spawn": snap.world_spawn,
         "world_spawn_angle": snap.world_spawn_angle,
         "next_entity": snap.next_entity,
+        "policy": snap.policy.to_json(),
         "anchor_ids": anchors_list,
         "region_files": regions_list,
         "guests": guests_json,
@@ -158,8 +174,12 @@ pub fn save_checkpoint_to_disk(world_root: &Path, snap: &TimelineSnapshot) -> bo
     true
 }
 
-pub fn restore_disk_files_on_rollback(world_root: &Path) {
-    let cp_dir = checkpoint_dir(world_root);
+pub fn save_checkpoint_to_disk(world_root: &Path, snap: &TimelineSnapshot) -> bool {
+    save_slot_to_disk(world_root, "default", snap)
+}
+
+pub fn restore_disk_files_for_slot(world_root: &Path, slot: &str) {
+    let cp_dir = slot_dir(world_root, slot);
     let cp_players = cp_dir.join("players");
     let target_players = world_root.join("players");
     if cp_players.is_dir() {
@@ -172,8 +192,12 @@ pub fn restore_disk_files_on_rollback(world_root: &Path) {
     }
 }
 
-pub fn load_checkpoint_from_disk(world_root: &Path) -> Option<TimelineSnapshot> {
-    let cp_dir = checkpoint_dir(world_root);
+pub fn restore_disk_files_on_rollback(world_root: &Path) {
+    restore_disk_files_for_slot(world_root, "default");
+}
+
+pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnapshot> {
+    let cp_dir = slot_dir(world_root, slot);
     let meta_file = cp_dir.join("meta.json");
     let meta_str = fs::read_to_string(meta_file).ok()?;
     let meta: serde_json::Value = serde_json::from_str(&meta_str).ok()?;
@@ -256,7 +280,6 @@ pub fn load_checkpoint_from_disk(world_root: &Path) -> Option<TimelineSnapshot> 
                 )
             });
 
-            // Ищем dat файл игрока: сначала по 32-hex, потом по обычному UUID дефисному представлению
             let player_dat_hex = cp_players.join("data").join(format!("{:032x}.dat", uuid));
             let player_dat_std = cp_players.join("data").join(format!("{}.dat", format_uuid_std(uuid)));
             let player_dat = if player_dat_hex.is_file() {
@@ -322,7 +345,6 @@ pub fn load_checkpoint_from_disk(world_root: &Path) -> Option<TimelineSnapshot> 
                 saved: player_tag.clone(),
             };
 
-            // Считываем инвентарь и эндер-сундук из player_tag
             if let Some(tag) = &player_tag {
                 if let Some(Tag::List(items)) = tag.get("Inventory") {
                     for it in items {
@@ -398,6 +420,59 @@ pub fn load_checkpoint_from_disk(world_root: &Path) -> Option<TimelineSnapshot> 
         offline_player_data,
         levels: HashMap::new(),
     })
+}
+
+pub fn load_checkpoint_from_disk(world_root: &Path) -> Option<TimelineSnapshot> {
+    load_slot_from_disk(world_root, "default")
+}
+
+pub fn list_disk_slots(world_root: &Path) -> Vec<serde_json::Value> {
+    let mut list = Vec::new();
+    // 1. Дефолтный слот
+    let def_meta = checkpoint_dir(world_root).join("meta.json");
+    if let Ok(s) = fs::read_to_string(&def_meta) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&s) {
+            list.push(serde_json::json!({
+                "slot": "default",
+                "game_time": val.get("game_time"),
+                "saved_at_unix": val.get("saved_at_unix"),
+                "guests_count": val.get("guests").and_then(|g| g.as_array()).map(|a| a.len()).unwrap_or(0)
+            }));
+        }
+    }
+
+    // 2. Именованные слоты
+    let slots_base = world_root.join("rzero").join("slots");
+    if let Ok(entries) = fs::read_dir(slots_base) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let meta_f = p.join("meta.json");
+                if let Ok(s) = fs::read_to_string(&meta_f) {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&s) {
+                        list.push(serde_json::json!({
+                            "slot": name,
+                            "game_time": val.get("game_time"),
+                            "saved_at_unix": val.get("saved_at_unix"),
+                            "guests_count": val.get("guests").and_then(|g| g.as_array()).map(|a| a.len()).unwrap_or(0)
+                        }));
+                    }
+                }
+            }
+        }
+    }
+
+    list
+}
+
+pub fn delete_disk_slot(world_root: &Path, slot: &str) -> bool {
+    let dir = slot_dir(world_root, slot);
+    if dir.exists() {
+        fs::remove_dir_all(dir).is_ok()
+    } else {
+        false
+    }
 }
 
 fn format_uuid_std(u: u128) -> String {

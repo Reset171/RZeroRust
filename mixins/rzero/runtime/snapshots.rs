@@ -260,6 +260,7 @@ pub struct TimelineSnapshot {
 
 std::thread_local! {
     pub static SNAPSHOT: RefCell<Option<TimelineSnapshot>> = const { RefCell::new(None) };
+    pub static SLOTS: RefCell<HashMap<String, TimelineSnapshot>> = RefCell::new(HashMap::new());
 }
 
 pub fn get_snapshot_clone() -> Option<TimelineSnapshot> {
@@ -272,4 +273,32 @@ pub fn set_snapshot(snap: Option<TimelineSnapshot>) {
 
 pub fn clear_snapshot() {
     SNAPSHOT.with(|cell| *cell.borrow_mut() = None);
+}
+
+pub fn get_slot_snapshot_clone(slot: &str) -> Option<TimelineSnapshot> {
+    if slot == "default" {
+        return get_snapshot_clone();
+    }
+    SLOTS.with(|cell| cell.borrow().get(slot).cloned())
+}
+
+pub fn set_slot_snapshot(slot: &str, snap: TimelineSnapshot) {
+    if slot == "default" {
+        set_snapshot(Some(snap.clone()));
+    }
+    SLOTS.with(|cell| {
+        cell.borrow_mut().insert(slot.to_owned(), snap);
+    });
+}
+
+pub fn list_memory_slots() -> Vec<String> {
+    SLOTS.with(|cell| cell.borrow().keys().cloned().collect())
+}
+
+pub fn delete_slot_snapshot(slot: &str) -> bool {
+    if slot == "default" {
+        clear_snapshot();
+        return true;
+    }
+    SLOTS.with(|cell| cell.borrow_mut().remove(slot).is_some())
 }

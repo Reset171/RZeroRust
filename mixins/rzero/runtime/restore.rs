@@ -1,7 +1,10 @@
 use super::super::{
     Dim, Game,
 };
-use super::persistence::{load_checkpoint_from_disk, restore_disk_files_on_rollback};
+use super::persistence::{
+    load_checkpoint_from_disk, load_slot_from_disk, restore_disk_files_for_slot,
+    restore_disk_files_on_rollback,
+};
 use super::snapshots::*;
 use super::types::*;
 use horizon_client::{
@@ -273,17 +276,22 @@ pub fn apply_level_snapshot_in_place(
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
-    let snap = match get_snapshot_clone() {
+    let slot = with_state(|st| st.current_slot.clone());
+    rollback_slot_checkpoint_on_server(game, &slot)
+}
+
+pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
+    let snap = match get_slot_snapshot_clone(slot) {
         Some(s) => s,
-        None => match load_checkpoint_from_disk(&game.world_root) {
+        None => match load_slot_from_disk(&game.world_root, slot) {
             Some(s) => {
-                set_snapshot(Some(s.clone()));
+                set_slot_snapshot(slot, s.clone());
                 s
             }
             None => return false,
         },
     };
-    restore_disk_files_on_rollback(&game.world_root);
+    restore_disk_files_for_slot(&game.world_root, slot);
     let policy = &snap.policy;
 
     if policy.world_time {
