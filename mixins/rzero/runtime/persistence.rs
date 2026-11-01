@@ -50,7 +50,7 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) {
             if p.is_dir() {
                 copy_dir_recursive(&p, &target);
             } else if p.is_file() {
-                // Fast-path: skip copying if file size and modified timestamp match
+                // Fast-path: skip copying if size and exact mtime match
                 if let (Ok(m_src), Ok(m_dst)) = (p.metadata(), target.metadata()) {
                     if m_src.len() == m_dst.len() {
                         if let (Ok(t_src), Ok(t_dst)) = (m_src.modified(), m_dst.modified()) {
@@ -60,7 +60,13 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) {
                         }
                     }
                 }
-                let _ = fs::copy(&p, &target);
+                if fs::copy(&p, &target).is_ok() {
+                    if let (Ok(m), Ok(f)) = (p.metadata(), fs::File::options().write(true).open(&target)) {
+                        if let Ok(mtime) = m.modified() {
+                            let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
+                        }
+                    }
+                }
             }
         }
     }

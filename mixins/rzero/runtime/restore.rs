@@ -391,7 +391,6 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     restore_offline_files(&snap.offline_player_data, policy.player_stats);
 
     game.streaming.wait(std::time::Duration::from_millis(2));
-    let _ = game.save.flush();
 
     let subfolders = ["region", "entities", "poi"];
     let dims = [
@@ -413,26 +412,6 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         }
     }
 
-    if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
-        &game.res,
-        &game.pack,
-        &game.options,
-        &game.settings,
-        &game.world_root,
-        game.dim,
-        game.world.shape,
-        game.level.seed,
-        &game.level.enabled_features,
-    ) {
-        game.streaming = fresh_streaming;
-        game.save = fresh_save;
-    } else {
-        game.save = Arc::new(horizon_client::save::SaveDir::new(
-            game.save.root.clone(),
-            game.save.shape,
-        ));
-    }
-
     let target_dim = snap
         .guests
         .values()
@@ -441,6 +420,21 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         .unwrap_or_else(|| {
             snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
         });
+
+    if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
+        &game.res,
+        &game.pack,
+        &game.options,
+        &game.settings,
+        &game.world_root,
+        target_dim,
+        game.world.shape,
+        game.level.seed,
+        &game.level.enabled_features,
+    ) {
+        game.streaming = fresh_streaming;
+        game.save = fresh_save;
+    }
 
     bench_accum(Phase::ServerGlobals, t_globals);
     let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;

@@ -86,7 +86,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     ops::ControlFlow,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
