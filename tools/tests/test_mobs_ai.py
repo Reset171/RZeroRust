@@ -57,24 +57,24 @@ def test_7_villager_ai_determinism(h):
     h.command("summon villager 702.5 65 700.5 {NoAI:0b}")
     h.wait(6)
 
-    # 1. Чекпоинт
+    # Замораживаем мир ДО чекпоинта, чтобы тики шли строго по шагам
+    h.command("tick freeze")
+    h.wait(4)
+
+    # 1. Чекпоинт в замороженном состоянии
     h.rzero("set")
     h.wait(4)
 
-    # Замораживаем мир перед откатными шагами
-    h.command("tick freeze")
-    h.wait(2)
-
     # 2. Замер 1: откат в замороженном мире + строго 10 тиков шага
     h.rzero("load")
-    h.wait(2)
+    h.wait(4)
     h.command("tick step 10")
     h.wait(15)
     ents_1 = {e["id"]: (round(e["pos"][0], 3), round(e["pos"][2], 3)) for e in h.entities(radius=10, entity_type="villager").get("entities", [])}
 
     # 3. Замер 2: повторный откат в замороженном мире + строго 10 тиков шага
     h.rzero("load")
-    h.wait(2)
+    h.wait(4)
     h.command("tick step 10")
     h.wait(15)
     ents_2 = {e["id"]: (round(e["pos"][0], 3), round(e["pos"][2], 3)) for e in h.entities(radius=10, entity_type="villager").get("entities", [])}

@@ -404,6 +404,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.dim,
         game.world.shape,
         game.level.seed,
+        &game.level.enabled_features,
     ) {
         game.streaming = fresh_streaming;
         game.save = fresh_save;

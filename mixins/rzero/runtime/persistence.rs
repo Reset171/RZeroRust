@@ -432,7 +432,7 @@ pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnap
         guests,
         offline_player_data,
         levels: HashMap::new(),
-        mob_players: HashMap::new(),
+        mob_players: horizon_client::fast_hash::FxHashMap::default(),
     })
 }
 
