@@ -32,6 +32,7 @@ def test_37_raid_determinism_and_coords(h):
 def test_38_chest_loot_table_determinism(h):
     setup_clean_env(h)
     h.tp(1600.5, 65, 1600.5)
+    h.wait(8)
     h.command("setblock 1600 65 1600 minecraft:chest{LootTable:'minecraft:chests/simple_dungeon'}")
     h.wait(4)
 

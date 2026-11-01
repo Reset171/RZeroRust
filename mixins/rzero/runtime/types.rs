@@ -230,6 +230,16 @@ impl RollbackPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct RollbackBenchmark {
+    pub total_ms: f64,
+    pub globals_ms: f64,
+    pub blocks_ms: f64,
+    pub containers_ms: f64,
+    pub entities_ms: f64,
+    pub player_ms: f64,
+}
+
 pub struct RZeroState {
     pub current_slot: String,
     pub auto_save: bool,
@@ -259,6 +269,7 @@ pub struct RZeroState {
     pub pending_death_rollback: Option<u128>,
     pub pending_save_request: bool,
     pub pending_load_request: bool,
+    pub last_benchmark: Option<RollbackBenchmark>,
 }
 
 impl Default for RZeroState {
@@ -292,6 +303,7 @@ impl Default for RZeroState {
             pending_death_rollback: None,
             pending_save_request: false,
             pending_load_request: false,
+            last_benchmark: None,
         }
     }
 }

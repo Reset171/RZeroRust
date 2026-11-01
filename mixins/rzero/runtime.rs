@@ -294,6 +294,16 @@ impl RollbackPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct RollbackBenchmark {
+    pub total_ms: f64,
+    pub globals_ms: f64,
+    pub blocks_ms: f64,
+    pub containers_ms: f64,
+    pub entities_ms: f64,
+    pub player_ms: f64,
+}
+
 pub struct RZeroState {
     pub current_slot: String,
     pub auto_save: bool,
@@ -323,6 +333,7 @@ pub struct RZeroState {
     pub pending_death_rollback: Option<u128>,
     pub pending_save_request: bool,
     pub pending_load_request: bool,
+    pub last_benchmark: Option<RollbackBenchmark>,
 }
 
 impl Default for RZeroState {
@@ -356,6 +367,7 @@ impl Default for RZeroState {
             pending_death_rollback: None,
             pending_save_request: false,
             pending_load_request: false,
+            last_benchmark: None,
         }
     }
 }
@@ -1433,9 +1445,10 @@ pub fn apply_level_snapshot_in_place(
     dim: Dim,
     snap: &LevelSnapshot,
     policy: &RollbackPolicy,
-) {
+) -> (f64, f64, f64) {
     let old_chunks = game.world.chunks.clone();
 
+    let t_blocks = std::time::Instant::now();
     if policy.blocks || policy.biomes {
         let mut changed_coords = Vec::new();
         for (&(cx, cz), snap_chunk) in snap.chunks.iter() {
@@ -1510,6 +1523,8 @@ pub fn apply_level_snapshot_in_place(
         }
     }
 
+    let blocks_ms = (std::time::Instant::now() - t_blocks).as_secs_f64() * 1000.0;
+    let t_containers = std::time::Instant::now();
     if policy.block_entities {
         let mut be_positions: Vec<(i32, i32, i32)> =
             game.world.block_entities.keys().copied().collect();
@@ -1530,6 +1545,8 @@ pub fn apply_level_snapshot_in_place(
             }
         }
     }
+    let containers_ms = (std::time::Instant::now() - t_containers).as_secs_f64() * 1000.0;
+    let t_entities = std::time::Instant::now();
 
     if policy.block_ticks || policy.fluid_ticks {
         let mut all_chunk_keys: HashSet<(i32, i32)> = old_chunks.keys().copied().collect();
@@ -1657,6 +1674,9 @@ pub fn apply_level_snapshot_in_place(
     game.close_container();
     game.station = None;
     game.container = None;
+
+    let entities_ms = (std::time::Instant::now() - t_entities).as_secs_f64() * 1000.0;
+    (blocks_ms, containers_ms, entities_ms)
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -1665,6 +1685,8 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 }
 
 pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
+    let t_start = std::time::Instant::now();
+    let t_globals = std::time::Instant::now();
     let _ = game.save.flush();
     game.world.modified.clear();
     game.world.loaded_entities.clear();
@@ -1810,6 +1832,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
         });
 
+    let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;
     if game.dim != target_dim {
         let _ = game.enter_level(None, target_dim);
     }
@@ -1825,10 +1848,17 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         .filter(|&d| d != target_dim)
         .collect();
 
+    let mut acc_blocks_ms = 0.0;
+    let mut acc_containers_ms = 0.0;
+    let mut acc_entities_ms = 0.0;
+
     for dim in other_dims {
         if let Some(level_snap) = snap.levels.get(&dim) {
             if game.enter_level(None, dim).is_ok() {
-                apply_level_snapshot_in_place(game, dim, level_snap, policy);
+                let (b, c, e) = apply_level_snapshot_in_place(game, dim, level_snap, policy);
+                acc_blocks_ms += b;
+                acc_containers_ms += c;
+                acc_entities_ms += e;
             }
         }
     }
@@ -1837,8 +1867,13 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     }
 
     if let Some(level_snap) = snap.levels.get(&target_dim) {
-        apply_level_snapshot_in_place(game, target_dim, level_snap, policy);
+        let (b, c, e) = apply_level_snapshot_in_place(game, target_dim, level_snap, policy);
+        acc_blocks_ms += b;
+        acc_containers_ms += c;
+        acc_entities_ms += e;
     }
+
+    let t_player = std::time::Instant::now();
 
     if let Some(mut host) = game.lan.take() {
         if policy.server_world_border {
@@ -2141,12 +2176,23 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.publish_boss_bars();
     }
 
+    let player_ms = (std::time::Instant::now() - t_player).as_secs_f64() * 1000.0;
+    let total_ms = (std::time::Instant::now() - t_start).as_secs_f64() * 1000.0;
+
     with_state_mut(|st| {
         st.last_save_tick = snap.game_time;
         st.pending_death_rollback = None;
         st.current_intensity = 0.0;
         st.peak_intensity = 0.0;
         st.relax_ticks = 0;
+        st.last_benchmark = Some(RollbackBenchmark {
+            total_ms,
+            globals_ms,
+            blocks_ms: acc_blocks_ms,
+            containers_ms: acc_containers_ms,
+            entities_ms: acc_entities_ms,
+            player_ms,
+        });
     });
     true
 }
@@ -2693,9 +2739,33 @@ pub fn execute_rzero_command(
         "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
         "autosave" => handle_autosave_subcommand(game, &words[2..]),
-        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave>".to_owned(),
+        "bench" | "benchmark" => handle_bench_subcommand(),
+        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench>".to_owned(),
     };
     vec![reply]
+}
+
+pub fn handle_bench_subcommand() -> String {
+    let bench = with_state(|st| st.last_benchmark);
+    match bench {
+        Some(b) => {
+            format!(
+                "[RZero Benchmark] Last Rollback: {:.2} ms\n  ├── Blocks & Chunks:     {:.2} ms ({:.1}%)\n  ├── Entities & Mobs:     {:.2} ms ({:.1}%)\n  ├── Block Entities:      {:.2} ms ({:.1}%)\n  ├── Player & Network:    {:.2} ms ({:.1}%)\n  └── Globals & Weather:   {:.2} ms ({:.1}%)",
+                b.total_ms,
+                b.blocks_ms,
+                if b.total_ms > 0.0 { (b.blocks_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.entities_ms,
+                if b.total_ms > 0.0 { (b.entities_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.containers_ms,
+                if b.total_ms > 0.0 { (b.containers_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.player_ms,
+                if b.total_ms > 0.0 { (b.player_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.globals_ms,
+                if b.total_ms > 0.0 { (b.globals_ms / b.total_ms) * 100.0 } else { 0.0 }
+            )
+        }
+        None => "[RZero Benchmark] No rollback has been executed yet.".to_owned(),
+    }
 }
 
 pub fn handle_slot_subcommand(
@@ -2938,6 +3008,7 @@ pub fn report_status_json(game: &Game<'_>) -> String {
         "combat_intensity": intensity,
         "peak_intensity": peak,
         "player": player_json,
+        "last_benchmark": with_state(|st| st.last_benchmark),
     }))
     .unwrap_or_else(|_| "{}".to_owned())
 }

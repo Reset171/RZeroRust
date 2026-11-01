@@ -59,9 +59,33 @@ pub fn execute_rzero_command(
         "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
         "autosave" => handle_autosave_subcommand(game, &words[2..]),
-        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave>".to_owned(),
+        "bench" | "benchmark" => handle_bench_subcommand(),
+        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench>".to_owned(),
     };
     vec![reply]
+}
+
+pub fn handle_bench_subcommand() -> String {
+    let bench = with_state(|st| st.last_benchmark);
+    match bench {
+        Some(b) => {
+            format!(
+                "[RZero Benchmark] Last Rollback: {:.2} ms\n  ├── Blocks & Chunks:     {:.2} ms ({:.1}%)\n  ├── Entities & Mobs:     {:.2} ms ({:.1}%)\n  ├── Block Entities:      {:.2} ms ({:.1}%)\n  ├── Player & Network:    {:.2} ms ({:.1}%)\n  └── Globals & Weather:   {:.2} ms ({:.1}%)",
+                b.total_ms,
+                b.blocks_ms,
+                if b.total_ms > 0.0 { (b.blocks_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.entities_ms,
+                if b.total_ms > 0.0 { (b.entities_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.containers_ms,
+                if b.total_ms > 0.0 { (b.containers_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.player_ms,
+                if b.total_ms > 0.0 { (b.player_ms / b.total_ms) * 100.0 } else { 0.0 },
+                b.globals_ms,
+                if b.total_ms > 0.0 { (b.globals_ms / b.total_ms) * 100.0 } else { 0.0 }
+            )
+        }
+        None => "[RZero Benchmark] No rollback has been executed yet.".to_owned(),
+    }
 }
 
 pub fn handle_slot_subcommand(
@@ -304,6 +328,7 @@ pub fn report_status_json(game: &Game<'_>) -> String {
         "combat_intensity": intensity,
         "peak_intensity": peak,
         "player": player_json,
+        "last_benchmark": with_state(|st| st.last_benchmark),
     }))
     .unwrap_or_else(|_| "{}".to_owned())
 }

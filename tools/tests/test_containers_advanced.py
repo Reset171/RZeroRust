@@ -6,6 +6,7 @@ from . import setup_clean_env
 def test_33_furnace_cook_and_burn_time(h):
     setup_clean_env(h)
     h.tp(1500.5, 65, 1500.5)
+    h.wait(8)
     h.command("setblock 1500 65 1500 minecraft:barrel{Items:[{Slot:0b,id:'minecraft:diamond',count:10}]}")
     h.wait(4)
 

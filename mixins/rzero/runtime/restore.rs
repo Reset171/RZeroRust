@@ -47,9 +47,10 @@ pub fn apply_level_snapshot_in_place(
     dim: Dim,
     snap: &LevelSnapshot,
     policy: &RollbackPolicy,
-) {
+) -> (f64, f64, f64) {
     let old_chunks = game.world.chunks.clone();
 
+    let t_blocks = std::time::Instant::now();
     if policy.blocks || policy.biomes {
         let mut changed_coords = Vec::new();
         for (&(cx, cz), snap_chunk) in snap.chunks.iter() {
@@ -124,6 +125,8 @@ pub fn apply_level_snapshot_in_place(
         }
     }
 
+    let blocks_ms = (std::time::Instant::now() - t_blocks).as_secs_f64() * 1000.0;
+    let t_containers = std::time::Instant::now();
     if policy.block_entities {
         let mut be_positions: Vec<(i32, i32, i32)> =
             game.world.block_entities.keys().copied().collect();
@@ -144,6 +147,8 @@ pub fn apply_level_snapshot_in_place(
             }
         }
     }
+    let containers_ms = (std::time::Instant::now() - t_containers).as_secs_f64() * 1000.0;
+    let t_entities = std::time::Instant::now();
 
     if policy.block_ticks || policy.fluid_ticks {
         let mut all_chunk_keys: HashSet<(i32, i32)> = old_chunks.keys().copied().collect();
@@ -271,6 +276,9 @@ pub fn apply_level_snapshot_in_place(
     game.close_container();
     game.station = None;
     game.container = None;
+
+    let entities_ms = (std::time::Instant::now() - t_entities).as_secs_f64() * 1000.0;
+    (blocks_ms, containers_ms, entities_ms)
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -279,6 +287,8 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 }
 
 pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
+    let t_start = std::time::Instant::now();
+    let t_globals = std::time::Instant::now();
     let _ = game.save.flush();
     game.world.modified.clear();
     game.world.loaded_entities.clear();
@@ -424,6 +434,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
         });
 
+    let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;
     if game.dim != target_dim {
         let _ = game.enter_level(None, target_dim);
     }
@@ -439,10 +450,17 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         .filter(|&d| d != target_dim)
         .collect();
 
+    let mut acc_blocks_ms = 0.0;
+    let mut acc_containers_ms = 0.0;
+    let mut acc_entities_ms = 0.0;
+
     for dim in other_dims {
         if let Some(level_snap) = snap.levels.get(&dim) {
             if game.enter_level(None, dim).is_ok() {
-                apply_level_snapshot_in_place(game, dim, level_snap, policy);
+                let (b, c, e) = apply_level_snapshot_in_place(game, dim, level_snap, policy);
+                acc_blocks_ms += b;
+                acc_containers_ms += c;
+                acc_entities_ms += e;
             }
         }
     }
@@ -451,8 +469,13 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     }
 
     if let Some(level_snap) = snap.levels.get(&target_dim) {
-        apply_level_snapshot_in_place(game, target_dim, level_snap, policy);
+        let (b, c, e) = apply_level_snapshot_in_place(game, target_dim, level_snap, policy);
+        acc_blocks_ms += b;
+        acc_containers_ms += c;
+        acc_entities_ms += e;
     }
+
+    let t_player = std::time::Instant::now();
 
     if let Some(mut host) = game.lan.take() {
         if policy.server_world_border {
@@ -755,12 +778,23 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.publish_boss_bars();
     }
 
+    let player_ms = (std::time::Instant::now() - t_player).as_secs_f64() * 1000.0;
+    let total_ms = (std::time::Instant::now() - t_start).as_secs_f64() * 1000.0;
+
     with_state_mut(|st| {
         st.last_save_tick = snap.game_time;
         st.pending_death_rollback = None;
         st.current_intensity = 0.0;
         st.peak_intensity = 0.0;
         st.relax_ticks = 0;
+        st.last_benchmark = Some(RollbackBenchmark {
+            total_ms,
+            globals_ms,
+            blocks_ms: acc_blocks_ms,
+            containers_ms: acc_containers_ms,
+            entities_ms: acc_entities_ms,
+            player_ms,
+        });
     });
     true
 }

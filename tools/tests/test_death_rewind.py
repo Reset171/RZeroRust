@@ -86,8 +86,9 @@ def test_18_drowning_and_damage_after_rewind(h):
     assert not any("невосприимчива" in line.lower() or "invulnerable" in line.lower() for line in chat), f"Player remained invulnerable after rewind: {chat}"
 
     # 4. Проверка погружения в воду и потери воздуха (игрок должен тонуть)
-    h.command("fill 990 60 990 994 65 994 minecraft:water")
     h.tp(992.5, 61.0, 992.5)
+    h.wait(8)
+    h.command("fill 990 60 990 994 65 994 minecraft:water")
     h.wait(20)
     air = h.state()["player"].get("air", 300)
     assert air < 300, f"Player does not lose air under water after rewind: air={air}"
