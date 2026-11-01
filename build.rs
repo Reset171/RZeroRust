@@ -15,6 +15,7 @@ fn assemble_runtime() {
     let files = [
         "types.rs",
         "snapshots.rs",
+        "benchmark.rs",
         "adaptive.rs",
         "capture.rs",
         "restore.rs",
@@ -84,10 +85,12 @@ use horizon_world::{
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    fs,
+    fs::{self, OpenOptions},
+    io::Write,
     ops::ControlFlow,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
+    time::Instant,
 };
 "#;
 

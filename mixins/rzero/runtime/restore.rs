@@ -88,12 +88,15 @@ pub fn apply_level_snapshot_in_place(
                 }
             }
         }
+        bench_add_chunks(snap.chunks.len());
+        bench_add_blocks_changed(changed_coords.len());
 
         if policy.blocks {
             for (wx, wy, wz, want) in changed_coords {
                 let _ = game.world.set(wx, wy, wz, BlockStateId(want));
             }
         }
+        bench_accum(Phase::ChunkBlocks, t_blocks);
 
         if policy.blocks && policy.biomes {
             game.world.chunks = Default::default();
@@ -146,6 +149,7 @@ pub fn apply_level_snapshot_in_place(
                 log.push(pos);
             }
         }
+        bench_accum(Phase::ChunkBeLoad, t_containers);
     }
     let containers_ms = (std::time::Instant::now() - t_containers).as_secs_f64() * 1000.0;
     let t_entities = std::time::Instant::now();
@@ -190,6 +194,7 @@ pub fn apply_level_snapshot_in_place(
     }
 
     if policy.entities_presence {
+        bench_add_mobs(snap.mobs.len());
         game.mobs = snap.mobs.clone();
         if policy.dropped_items {
             game.dropped = snap.dropped.clone();
@@ -277,6 +282,7 @@ pub fn apply_level_snapshot_in_place(
     game.station = None;
     game.container = None;
 
+    bench_accum(Phase::SpawnNbt, t_entities);
     let entities_ms = (std::time::Instant::now() - t_entities).as_secs_f64() * 1000.0;
     (blocks_ms, containers_ms, entities_ms)
 }
@@ -302,6 +308,8 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             None => return false,
         },
     };
+    bench_begin(&format!("ROLLBACK RESTORE [{}]", slot), game.world.game_time);
+    bench_add_players(snap.guests.len());
     restore_disk_files_for_slot(&game.world_root, slot);
     let policy = &snap.policy;
 
@@ -434,6 +442,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
         });
 
+    bench_accum(Phase::ServerGlobals, t_globals);
     let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;
     if game.dim != target_dim {
         let _ = game.enter_level(None, target_dim);
@@ -778,6 +787,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.publish_boss_bars();
     }
 
+    bench_accum(Phase::PlayersOnline, t_player);
     let player_ms = (std::time::Instant::now() - t_player).as_secs_f64() * 1000.0;
     let total_ms = (std::time::Instant::now() - t_start).as_secs_f64() * 1000.0;
 
@@ -796,5 +806,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             player_ms,
         });
     });
+
+    let bench_report = bench_end_and_log();
+    log::info!("{}", bench_report);
+    append_to_rzero_log(&game.world_root, &bench_report);
     true
 }

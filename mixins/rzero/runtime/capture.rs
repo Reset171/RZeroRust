@@ -268,6 +268,8 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     }
 
     let now = game.world.game_time;
+    bench_begin(&format!("CHECKPOINT CAPTURE [{}]", slot), now);
+    bench_add_players(online.len());
     let (anchor_set, policy) = with_state_mut(|st| {
         let anchors: HashSet<u128> = resolve_anchors(&st.anchor, &online, now, requester)
             .into_iter()
@@ -339,4 +341,8 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     let _ = game.save.flush();
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
+
+    let bench_report = bench_end_and_log();
+    log::info!("{}", bench_report);
+    append_to_rzero_log(&game.world_root, &bench_report);
 }

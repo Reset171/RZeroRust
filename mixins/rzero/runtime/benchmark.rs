@@ -1,4 +1,4 @@
-//! 1:1 Rust port of RZBenchmark.java for nanosecond phase profiling of Rollback and Capture.
+// 1:1 Rust port of RZBenchmark.java for nanosecond phase profiling of Rollback and Capture.
 
 use std::cell::RefCell;
 use std::time::Instant;
@@ -268,4 +268,28 @@ pub fn bench_end_and_log() -> String {
 
 pub fn bench_get_last_report() -> String {
     BENCHMARK.with(|cell| cell.borrow().last_report.clone())
+}
+
+pub fn append_to_rzero_log(world_root: &std::path::Path, text: &str) {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    // 1. Instance logs/rzero.log (alongside latest.log)
+    if let Some(instance_dir) = world_root.parent().and_then(|p| p.parent()) {
+        let logs_dir = instance_dir.join("logs");
+        if logs_dir.is_dir() {
+            let log_file = logs_dir.join("rzero.log");
+            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(log_file) {
+                let _ = writeln!(f, "{}", text);
+            }
+        }
+    }
+
+    // 2. World-specific saves/<World>/rzero/benchmark.log
+    let rzero_dir = world_root.join("rzero");
+    let _ = std::fs::create_dir_all(&rzero_dir);
+    let world_log = rzero_dir.join("benchmark.log");
+    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(world_log) {
+        let _ = writeln!(f, "{}", text);
+    }
 }
