@@ -382,7 +382,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
 
     restore_offline_files(&snap.offline_player_data, policy.player_stats);
 
-    game.streaming.wait(std::time::Duration::from_millis(200));
+    game.streaming.wait(std::time::Duration::from_millis(2));
     let _ = game.save.flush();
 
     let subfolders = ["region", "entities", "poi"];

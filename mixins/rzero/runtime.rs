@@ -460,7 +460,6 @@ pub struct FallingSnapshot {
     pub velocity: Vec3,
     pub age: i32,
     pub no_gravity: bool,
-    pub portal: horizon_client::nether_portal::PortalState,
     pub drop_item: bool,
     pub fall_distance: f64,
     pub stuck: Vec3,
@@ -479,7 +478,6 @@ impl FallingSnapshot {
             velocity: f.velocity,
             age: f.age,
             no_gravity: f.no_gravity,
-            portal: f.portal.clone(),
             drop_item: f.drop_item,
             fall_distance: f.fall_distance,
             stuck: f.stuck,
@@ -498,7 +496,6 @@ impl FallingSnapshot {
             velocity: self.velocity,
             age: self.age,
             no_gravity: self.no_gravity,
-            portal: self.portal.clone(),
             drop_item: self.drop_item,
             fall_distance: self.fall_distance,
             stuck: self.stuck,
@@ -1780,7 +1777,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
 
     restore_offline_files(&snap.offline_player_data, policy.player_stats);
 
-    game.streaming.wait(std::time::Duration::from_millis(200));
+    game.streaming.wait(std::time::Duration::from_millis(2));
     let _ = game.save.flush();
 
     let subfolders = ["region", "entities", "poi"];
@@ -2235,6 +2232,16 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) {
             if p.is_dir() {
                 copy_dir_recursive(&p, &target);
             } else if p.is_file() {
+                // Fast-path: skip copying if file size and modified timestamp match
+                if let (Ok(m_src), Ok(m_dst)) = (p.metadata(), target.metadata()) {
+                    if m_src.len() == m_dst.len() {
+                        if let (Ok(t_src), Ok(t_dst)) = (m_src.modified(), m_dst.modified()) {
+                            if t_src == t_dst {
+                                continue;
+                            }
+                        }
+                    }
+                }
                 let _ = fs::copy(&p, &target);
             }
         }

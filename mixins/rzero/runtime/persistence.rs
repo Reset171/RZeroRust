@@ -50,6 +50,16 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) {
             if p.is_dir() {
                 copy_dir_recursive(&p, &target);
             } else if p.is_file() {
+                // Fast-path: skip copying if file size and modified timestamp match
+                if let (Ok(m_src), Ok(m_dst)) = (p.metadata(), target.metadata()) {
+                    if m_src.len() == m_dst.len() {
+                        if let (Ok(t_src), Ok(t_dst)) = (m_src.modified(), m_dst.modified()) {
+                            if t_src == t_dst {
+                                continue;
+                            }
+                        }
+                    }
+                }
                 let _ = fs::copy(&p, &target);
             }
         }
