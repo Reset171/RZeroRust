@@ -160,7 +160,8 @@ def build_test_catalog():
 def main():
     parser = argparse.ArgumentParser(description="RZero E2E modular test suite for Horizon engine")
     parser.add_argument("--test", type=str, default="all", help="Test number or search string")
-    parser.add_argument("--group", type=str, default=None, help="Filter by group (chunks, explosions, vehicles, mobs, death, slots, policies, containers, dimensions, ai)")
+    parser.add_argument("--group", type=str, default=None, help="Filter by group (chunks, explosions, vehicles, mobs, death, slots, policies, containers, dimensions, ai, world, portals, determinism)")
+    parser.add_argument("--fast", "--smoke", action="store_true", help="Run 5 fast representative smoke tests (10-12s) instead of the full suite")
     args = parser.parse_args()
 
     h = RZeroHarness()
@@ -173,7 +174,10 @@ def main():
     catalog = build_test_catalog()
 
     selected = catalog
-    if args.group:
+    if args.fast:
+        fast_ids = {1, 2, 9, 14, 19}
+        selected = [t for t in selected if t[0] in fast_ids]
+    elif args.group:
         selected = [t for t in selected if t[2].lower() == args.group.lower()]
 
     if args.test != "all":

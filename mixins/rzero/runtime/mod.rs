@@ -7,6 +7,7 @@ pub mod persistence;
 pub mod commands;
 pub mod ui;
 pub mod hooks;
+pub mod benchmark;
 
 pub use types::*;
 pub use snapshots::*;
@@ -17,3 +18,4 @@ pub use persistence::*;
 pub use commands::*;
 pub use ui::*;
 pub use hooks::*;
+pub use benchmark::*;
