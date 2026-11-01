@@ -306,7 +306,14 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.ui.rules = snap.rules.clone();
         game.world.health_rules = snap.health_rules;
         game.sync_rules();
+        game.clock.set_rate(snap.clock_rate);
+        game.clock.set_frozen(snap.clock_frozen);
+        game.ui.clock.rate = snap.clock_rate;
+        game.ui.clock.paused = snap.clock_frozen;
     }
+    game.portals.travel = None;
+    game.portals.player.cooldown = 80;
+    game.server_trips.clear();
     if policy.world_difficulty {
         game.ui.difficulty = snap.difficulty;
         game.level.set_difficulty(snap.difficulty);

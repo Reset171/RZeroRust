@@ -651,6 +651,8 @@ pub struct TimelineSnapshot {
     pub region_files: HashSet<PathBuf>,
     pub difficulty: u8,
     pub difficulty_locked: bool,
+    pub clock_rate: f32,
+    pub clock_frozen: bool,
     pub world_spawn: Option<[i32; 3]>,
     pub world_spawn_angle: [f32; 2],
     pub next_entity: u32,
@@ -1388,6 +1390,8 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         region_files,
         difficulty: game.ui.difficulty,
         difficulty_locked: game.level.difficulty_locked,
+        clock_rate: game.clock.rate(),
+        clock_frozen: game.clock.frozen(),
         world_spawn: game.level.world_spawn,
         world_spawn_angle: game.level.world_spawn_angle,
         next_entity: game.next_entity,
@@ -1685,7 +1689,14 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.ui.rules = snap.rules.clone();
         game.world.health_rules = snap.health_rules;
         game.sync_rules();
+        game.clock.set_rate(snap.clock_rate);
+        game.clock.set_frozen(snap.clock_frozen);
+        game.ui.clock.rate = snap.clock_rate;
+        game.ui.clock.paused = snap.clock_frozen;
     }
+    game.portals.travel = None;
+    game.portals.player.cooldown = 80;
+    game.server_trips.clear();
     if policy.world_difficulty {
         game.ui.difficulty = snap.difficulty;
         game.level.set_difficulty(snap.difficulty);
@@ -2547,6 +2558,8 @@ pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnap
         region_files,
         difficulty,
         difficulty_locked,
+        clock_rate: 20.0,
+        clock_frozen: false,
         world_spawn,
         world_spawn_angle,
         next_entity,

@@ -423,6 +423,8 @@ pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnap
         region_files,
         difficulty,
         difficulty_locked,
+        clock_rate: 20.0,
+        clock_frozen: false,
         world_spawn,
         world_spawn_angle,
         next_entity,

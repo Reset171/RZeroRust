@@ -45,6 +45,38 @@ from tools.tests.test_containers import (
 )
 from tools.tests.test_dimensions import test_17_end_dragon_bossbar_rollback
 from tools.tests.test_ai_telemetry import test_13_ai_json_telemetry
+from tools.tests.test_world_settings import (
+    test_19_tick_rate_and_freeze_rollback,
+    test_20_world_spawn_and_difficulty_lock,
+    test_21_schedule_function_cancellation,
+    test_22_fillbiome_rollback,
+    test_23_weather_and_thunder_rollback,
+)
+from tools.tests.test_portals import (
+    test_24_nether_portal_cold_chunk,
+    test_25_flying_ender_pearl_discard,
+    test_26_portal_processor_cooldown,
+    test_27_end_credits_respawn_safety,
+)
+from tools.tests.test_mobs_advanced import (
+    test_28_shoulder_parrots_rollback,
+    test_29_neutral_mob_anger_reset,
+    test_30_leash_distance_preservation,
+    test_31_slime_jump_delay_determinism,
+    test_32_sleeping_villager_day_schedule,
+)
+from tools.tests.test_containers_advanced import (
+    test_33_furnace_cook_and_burn_time,
+    test_34_hopper_transfer_cooldown,
+    test_35_item_frame_duplication_safety,
+    test_36_creative_cursor_item_retention,
+)
+from tools.tests.test_determinism_advanced import (
+    test_37_raid_determinism_and_coords,
+    test_38_chest_loot_table_determinism,
+    test_39_explored_map_fog_of_war,
+    test_40_subchunk_palette_expansion_bounds,
+)
 
 
 class TestRunner:
@@ -100,6 +132,28 @@ def build_test_catalog():
         (16, "Test 16: Flying Projectile Arrow Determinism", "vehicles", test_16_flying_arrow_projectile),
         (17, "Test 17: End Dragon Bossbar Cross-Dimension Rollback", "dimensions", test_17_end_dragon_bossbar_rollback),
         (18, "Test 18: Drowning and Damage After Rewind", "death", test_18_drowning_and_damage_after_rewind),
+        (19, "Test 19: Tick Rate and Freeze Rollback", "world", test_19_tick_rate_and_freeze_rollback),
+        (20, "Test 20: World Spawn and Difficulty Lock", "world", test_20_world_spawn_and_difficulty_lock),
+        (21, "Test 21: Scheduled Function Cancellation", "world", test_21_schedule_function_cancellation),
+        (22, "Test 22: Biome Palette FillBiome Rollback", "world", test_22_fillbiome_rollback),
+        (23, "Test 23: Weather and Thunder State Rollback", "world", test_23_weather_and_thunder_rollback),
+        (24, "Test 24: Nether Portal Cold Chunk Disappearance Fix", "portals", test_24_nether_portal_cold_chunk),
+        (25, "Test 25: Flying Ender Pearl Discard", "portals", test_25_flying_ender_pearl_discard),
+        (26, "Test 26: Portal Processor Cooldown Reset", "portals", test_26_portal_processor_cooldown),
+        (27, "Test 27: End Credits Respawn Safety", "portals", test_27_end_credits_respawn_safety),
+        (28, "Test 28: Shoulder Parrots Rollback", "mobs", test_28_shoulder_parrots_rollback),
+        (29, "Test 29: Neutral Mob Anger Reset", "mobs", test_29_neutral_mob_anger_reset),
+        (30, "Test 30: Leash Distance Preservation", "mobs", test_30_leash_distance_preservation),
+        (31, "Test 31: Slime Jump Delay Determinism", "mobs", test_31_slime_jump_delay_determinism),
+        (32, "Test 32: Sleeping Villager Day Schedule Sync", "mobs", test_32_sleeping_villager_day_schedule),
+        (33, "Test 33: Advanced Containers (Barrel Items) Rollback", "containers", test_33_furnace_cook_and_burn_time),
+        (34, "Test 34: Hopper Transfer Cooldown Preservation", "containers", test_34_hopper_transfer_cooldown),
+        (35, "Test 35: ArmorStand Equipment Duplication Safety", "containers", test_35_item_frame_duplication_safety),
+        (36, "Test 36: Player Cursor Inventory Retention", "containers", test_36_creative_cursor_item_retention),
+        (37, "Test 37: Raid Bad Omen Determinism", "determinism", test_37_raid_determinism_and_coords),
+        (38, "Test 38: Chest Loot Table Preservation", "determinism", test_38_chest_loot_table_determinism),
+        (39, "Test 39: Explored Map Fog of War Rollback", "determinism", test_39_explored_map_fog_of_war),
+        (40, "Test 40: Subchunk Palette Bounds Y 318 and -50", "determinism", test_40_subchunk_palette_expansion_bounds),
     ]
 
 

@@ -324,6 +324,8 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         region_files,
         difficulty: game.ui.difficulty,
         difficulty_locked: game.level.difficulty_locked,
+        clock_rate: game.clock.rate(),
+        clock_frozen: game.clock.frozen(),
         world_spawn: game.level.world_spawn,
         world_spawn_angle: game.level.world_spawn_angle,
         next_entity: game.next_entity,
