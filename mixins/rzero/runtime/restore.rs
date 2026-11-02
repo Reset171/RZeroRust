@@ -53,6 +53,7 @@ pub fn apply_level_snapshot_in_place(
     let t_blocks = std::time::Instant::now();
     if policy.blocks || policy.biomes {
         let mut changed_coords = Vec::new();
+
         for (&(cx, cz), snap_chunk) in snap.chunks.iter() {
             if let Some(live_chunk) = old_chunks.get(&(cx, cz)) {
                 if Arc::ptr_eq(live_chunk, snap_chunk) {
@@ -66,6 +67,15 @@ pub fn apply_level_snapshot_in_place(
                     if Arc::ptr_eq(live_sec, snap_sec) {
                         continue;
                     }
+                    if let (Some(u1), Some(u2)) = (snap_sec.blocks.uniform(), live_sec.blocks.uniform()) {
+                        if u1 == u2 {
+                            continue;
+                        }
+                    }
+                    if snap_sec.blocks == live_sec.blocks {
+                        continue;
+                    }
+
                     let y_base = min_y + (s_idx as i32) * 16;
                     let x_base = cx * 16;
                     let z_base = cz * 16;
