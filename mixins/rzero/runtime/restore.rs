@@ -324,8 +324,10 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
         });
 
-    let is_same_dim = game.dim == target_dim;
-    if !is_same_dim || slot != "default" {
+    let is_hot_rollback = slot == "default"
+        && game.dim == target_dim
+        && snap.levels.contains_key(&game.dim);
+    if !is_hot_rollback {
         let _ = game.save.flush();
     }
     let disk_files_changed = restore_disk_files_for_slot(&game.world_root, slot);
@@ -430,7 +432,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         }
     }
 
-    if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || slot != "default" {
+    if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || !is_hot_rollback {
         restore_offline_files(&snap.offline_player_data, policy.player_stats);
         game.streaming.wait(std::time::Duration::from_millis(2));
         if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
