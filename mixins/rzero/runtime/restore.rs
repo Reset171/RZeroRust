@@ -141,13 +141,9 @@ pub fn apply_level_snapshot_in_place(
     let blocks_ms = (std::time::Instant::now() - t_blocks).as_secs_f64() * 1000.0;
     let t_containers = std::time::Instant::now();
     if policy.block_entities {
-        let mut be_positions: Vec<(i32, i32, i32)> =
+        let mut be_positions: HashSet<(i32, i32, i32)> =
             game.world.block_entities.keys().copied().collect();
-        for &pos in snap.block_entities.keys() {
-            if !be_positions.contains(&pos) {
-                be_positions.push(pos);
-            }
-        }
+        be_positions.extend(snap.block_entities.keys().copied());
         game.world.block_entities.clear();
         for (&pos, be) in &snap.block_entities {
             game.world.block_entities.insert(pos, be.clone());
@@ -205,31 +201,31 @@ pub fn apply_level_snapshot_in_place(
 
     if policy.entities_presence {
         bench_add_mobs(snap.mobs.len());
-        game.mobs = snap.mobs.clone();
+        game.mobs.clone_from(&snap.mobs);
         if policy.dropped_items {
-            game.dropped = snap.dropped.clone();
+            game.dropped.clone_from(&snap.dropped);
         }
         if policy.experience_orbs {
-            game.orbs = snap.orbs.clone();
+            game.orbs.clone_from(&snap.orbs);
         }
-        game.creatures.projectiles = snap.projectiles.clone();
-        game.boats = snap.boats.clone();
-        game.carts = snap.carts.clone();
-        game.tnts = snap.tnts.clone();
+        game.creatures.projectiles.clone_from(&snap.projectiles);
+        game.boats.clone_from(&snap.boats);
+        game.carts.clone_from(&snap.carts);
+        game.tnts.clone_from(&snap.tnts);
         game.falling = snap.falling.iter().map(FallingSnapshot::to_live).collect();
-        game.paintings = snap.paintings.clone();
-        game.item_frames = snap.item_frames.clone();
-        game.armor_stands = snap.armor_stands.clone();
-        game.cushions = snap.cushions.clone();
-        game.others = snap.others.clone();
-        game.crystals = snap.crystals.clone();
+        game.paintings.clone_from(&snap.paintings);
+        game.item_frames.clone_from(&snap.item_frames);
+        game.armor_stands.clone_from(&snap.armor_stands);
+        game.cushions.clone_from(&snap.cushions);
+        game.others.clone_from(&snap.others);
+        game.crystals.clone_from(&snap.crystals);
         game.dragon = snap
             .dragon
             .as_ref()
             .and_then(|d| d.to_live(game.level.seed));
-        game.knot_ids = snap.knot_ids.clone();
-        game.persist.uuids = snap.persist_uuids.clone();
-        game.persist.raw = snap.persist_raw.clone();
+        game.knot_ids.clone_from(&snap.knot_ids);
+        game.persist.uuids.clone_from(&snap.persist_uuids);
+        game.persist.raw.clone_from(&snap.persist_raw);
     }
 
     if policy.world_raids {
@@ -311,8 +307,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         Some(s) => s,
         None => match load_slot_from_disk(&game.world_root, slot) {
             Some(s) => {
-                set_slot_snapshot(slot, s.clone());
-                s
+                let arc = Arc::new(s);
+                set_slot_snapshot(slot, Arc::clone(&arc));
+                arc
             }
             None => return false,
         },
@@ -327,8 +324,8 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
         });
 
-    let is_hot_rollback = slot == "default" && game.dim == target_dim;
-    if !is_hot_rollback {
+    let is_same_dim = game.dim == target_dim;
+    if !is_same_dim || slot != "default" {
         let _ = game.save.flush();
     }
     let disk_files_changed = restore_disk_files_for_slot(&game.world_root, slot);
@@ -411,10 +408,6 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     }
     game.creatures.reset_trader();
 
-    restore_offline_files(&snap.offline_player_data, policy.player_stats);
-
-    game.streaming.wait(std::time::Duration::from_millis(2));
-
     let subfolders = ["region", "entities", "poi"];
     let dims = [
         "dimensions/minecraft/overworld",
@@ -437,7 +430,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         }
     }
 
-    if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || !is_hot_rollback {
+    if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || slot != "default" {
+        restore_offline_files(&snap.offline_player_data, policy.player_stats);
+        game.streaming.wait(std::time::Duration::from_millis(2));
         if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
             &game.res,
             &game.pack,

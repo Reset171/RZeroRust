@@ -308,7 +308,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         }
     }
 
-    let timeline = TimelineSnapshot {
+    let timeline = Arc::new(TimelineSnapshot {
         anchor_ids: anchor_set,
         policy,
         game_time: game.world.game_time,
@@ -337,7 +337,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         offline_player_data,
         levels,
         mob_players: game.lan.as_ref().map(|h| h.mob_players.clone()).unwrap_or_default(),
-    };
+    });
 
     let _ = game.save.flush();
     save_slot_to_disk(&game.world_root, slot, &timeline);

@@ -69,7 +69,7 @@ pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
             if has_disk_cp {
                 if get_snapshot_clone().is_none() {
                     if let Some(snap) = load_checkpoint_from_disk(&game.world_root) {
-                        set_snapshot(Some(snap));
+                        set_snapshot(Some(Arc::new(snap)));
                     }
                 }
                 with_state_mut(|st| {
