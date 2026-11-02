@@ -28,6 +28,13 @@ def test_19_tick_rate_and_freeze_rollback(h):
     assert any("20.0" in line for line in chat), f"Tick rate not rolled back: {chat}"
     assert any("обычном режиме" in line.lower() or "running" in line.lower() for line in chat), f"Tick freeze not rolled back: {chat}"
 
+    # 5. Проверка: скорость хода суток нормальная (1.0, а не 20.0)
+    t0_day = h.state().get("time", {}).get("day_time", 0)
+    h.wait(10)
+    t1_day = h.state().get("time", {}).get("day_time", 0)
+    diff_day = t1_day - t0_day
+    assert diff_day <= 25, f"Sun/day cycle is moving too fast! Delta {diff_day} ticks over 10 game ticks (expected ~10-15)"
+
 
 def test_20_world_spawn_and_difficulty_lock(h):
     setup_clean_env(h)

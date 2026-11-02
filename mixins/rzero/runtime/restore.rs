@@ -336,7 +336,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.sync_rules();
         game.clock.set_rate(snap.clock_rate);
         game.clock.set_frozen(snap.clock_frozen);
-        game.ui.clock.rate = snap.clock_rate;
+        game.ui.clock.rate = snap.time_rate;
         game.ui.clock.paused = snap.clock_frozen;
     }
     game.portals.travel = None;

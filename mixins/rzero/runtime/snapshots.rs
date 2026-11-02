@@ -258,6 +258,7 @@ pub struct TimelineSnapshot {
     pub difficulty_locked: bool,
     pub clock_rate: f32,
     pub clock_frozen: bool,
+    pub time_rate: f32,
     pub world_spawn: Option<[i32; 3]>,
     pub world_spawn_angle: [f32; 2],
     pub next_entity: u32,

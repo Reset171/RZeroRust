@@ -667,6 +667,7 @@ pub struct TimelineSnapshot {
     pub difficulty_locked: bool,
     pub clock_rate: f32,
     pub clock_frozen: bool,
+    pub time_rate: f32,
     pub world_spawn: Option<[i32; 3]>,
     pub world_spawn_angle: [f32; 2],
     pub next_entity: u32,
@@ -1704,6 +1705,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         difficulty_locked: game.level.difficulty_locked,
         clock_rate: game.clock.rate(),
         clock_frozen: game.clock.frozen(),
+        time_rate: game.ui.clock.rate,
         world_spawn: game.level.world_spawn,
         world_spawn_angle: game.level.world_spawn_angle,
         next_entity: game.next_entity,
@@ -2035,7 +2037,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.sync_rules();
         game.clock.set_rate(snap.clock_rate);
         game.clock.set_frozen(snap.clock_frozen);
-        game.ui.clock.rate = snap.clock_rate;
+        game.ui.clock.rate = snap.time_rate;
         game.ui.clock.paused = snap.clock_frozen;
     }
     game.portals.travel = None;
@@ -2683,6 +2685,9 @@ pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot)
         "day_time": snap.day_time,
         "difficulty": snap.difficulty,
         "difficulty_locked": snap.difficulty_locked,
+        "clock_rate": snap.clock_rate,
+        "clock_frozen": snap.clock_frozen,
+        "time_rate": snap.time_rate,
         "world_spawn": snap.world_spawn,
         "world_spawn_angle": snap.world_spawn_angle,
         "next_entity": snap.next_entity,
@@ -2943,8 +2948,9 @@ pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnap
         region_files,
         difficulty,
         difficulty_locked,
-        clock_rate: 20.0,
-        clock_frozen: false,
+        clock_rate: meta["clock_rate"].as_f64().map(|v| v as f32).unwrap_or(20.0),
+        clock_frozen: meta["clock_frozen"].as_bool().unwrap_or(false),
+        time_rate: meta["time_rate"].as_f64().map(|v| v as f32).unwrap_or(1.0),
         world_spawn,
         world_spawn_angle,
         next_entity,
