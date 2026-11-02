@@ -2009,7 +2009,6 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
     let t_start = std::time::Instant::now();
     let t_globals = std::time::Instant::now();
-    let _ = game.save.flush();
     game.world.modified.clear();
     game.world.loaded_entities.clear();
     let snap = match get_slot_snapshot_clone(slot) {
@@ -2022,9 +2021,24 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             None => return false,
         },
     };
+
+    let target_dim = snap
+        .guests
+        .values()
+        .next()
+        .map(|g| Dim::from_id(&g.dimension))
+        .unwrap_or_else(|| {
+            snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
+        });
+
+    let is_hot_rollback = slot == "default" && game.dim == target_dim;
+    if !is_hot_rollback {
+        let _ = game.save.flush();
+    }
+    let disk_files_changed = restore_disk_files_for_slot(&game.world_root, slot);
+
     bench_begin(&format!("ROLLBACK RESTORE [{}]", slot), game.world.game_time);
     bench_add_players(snap.guests.len());
-    restore_disk_files_for_slot(&game.world_root, slot);
     let policy = &snap.policy;
 
     if policy.world_time {
@@ -2111,6 +2125,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         "dimensions/minecraft/the_nether",
         "dimensions/minecraft/the_end",
     ];
+    let mut deleted_region_files = false;
     for dim_path in dims {
         for sub in subfolders {
             let rdir = game.world_root.join(dim_path).join(sub);
@@ -2119,34 +2134,28 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                     let p = e.path();
                     if p.is_file() && !snap.region_files.contains(&p) {
                         let _ = fs::remove_file(&p);
+                        deleted_region_files = true;
                     }
                 }
             }
         }
     }
 
-    let target_dim = snap
-        .guests
-        .values()
-        .next()
-        .map(|g| Dim::from_id(&g.dimension))
-        .unwrap_or_else(|| {
-            snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
-        });
-
-    if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
-        &game.res,
-        &game.pack,
-        &game.options,
-        &game.settings,
-        &game.world_root,
-        target_dim,
-        game.world.shape,
-        game.level.seed,
-        &game.level.enabled_features,
-    ) {
-        game.streaming = fresh_streaming;
-        game.save = fresh_save;
+    if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || !is_hot_rollback {
+        if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
+            &game.res,
+            &game.pack,
+            &game.options,
+            &game.settings,
+            &game.world_root,
+            target_dim,
+            game.world.shape,
+            game.level.seed,
+            &game.level.enabled_features,
+        ) {
+            game.streaming = fresh_streaming;
+            game.save = fresh_save;
+        }
     }
 
     bench_accum(Phase::ServerGlobals, t_globals);
@@ -2546,17 +2555,18 @@ pub fn has_disk_slot(world_root: &Path, slot: &str) -> bool {
     slot_dir(world_root, slot).join("meta.json").is_file()
 }
 
-pub fn copy_dir_recursive(src: &Path, dst: &Path) {
+pub fn copy_dir_recursive(src: &Path, dst: &Path) -> usize {
     if !src.is_dir() {
-        return;
+        return 0;
     }
+    let mut copied = 0;
     let _ = fs::create_dir_all(dst);
     if let Ok(entries) = fs::read_dir(src) {
         for entry in entries.flatten() {
             let p = entry.path();
             let target = dst.join(entry.file_name());
             if p.is_dir() {
-                copy_dir_recursive(&p, &target);
+                copied += copy_dir_recursive(&p, &target);
             } else if p.is_file() {
                 // Fast-path: skip copying if size and exact mtime match
                 if let (Ok(m_src), Ok(m_dst)) = (p.metadata(), target.metadata()) {
@@ -2569,6 +2579,7 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) {
                     }
                 }
                 if fs::copy(&p, &target).is_ok() {
+                    copied += 1;
                     if let (Ok(m), Ok(f)) = (p.metadata(), fs::File::options().write(true).open(&target)) {
                         if let Ok(mtime) = m.modified() {
                             let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
@@ -2578,6 +2589,7 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) {
             }
         }
     }
+    copied
 }
 
 pub fn collect_files_recursive(
@@ -2710,23 +2722,25 @@ pub fn save_checkpoint_to_disk(world_root: &Path, snap: &TimelineSnapshot) -> bo
     save_slot_to_disk(world_root, "default", snap)
 }
 
-pub fn restore_disk_files_for_slot(world_root: &Path, slot: &str) {
+pub fn restore_disk_files_for_slot(world_root: &Path, slot: &str) -> usize {
     let cp_dir = slot_dir(world_root, slot);
+    let mut changed = 0;
     let cp_players = cp_dir.join("players");
     let target_players = world_root.join("players");
     if cp_players.is_dir() {
-        copy_dir_recursive(&cp_players, &target_players);
+        changed += copy_dir_recursive(&cp_players, &target_players);
     }
     let cp_data = cp_dir.join("data");
     let target_data = world_root.join("data");
     if cp_data.is_dir() {
-        copy_dir_recursive(&cp_data, &target_data);
+        changed += copy_dir_recursive(&cp_data, &target_data);
     }
     let cp_dims = cp_dir.join("dimensions");
     let target_dims = world_root.join("dimensions");
     if cp_dims.is_dir() {
-        copy_dir_recursive(&cp_dims, &target_dims);
+        changed += copy_dir_recursive(&cp_dims, &target_dims);
     }
+    changed
 }
 
 pub fn restore_disk_files_on_rollback(world_root: &Path) {

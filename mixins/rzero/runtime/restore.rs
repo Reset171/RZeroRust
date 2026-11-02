@@ -305,7 +305,6 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
     let t_start = std::time::Instant::now();
     let t_globals = std::time::Instant::now();
-    let _ = game.save.flush();
     game.world.modified.clear();
     game.world.loaded_entities.clear();
     let snap = match get_slot_snapshot_clone(slot) {
@@ -318,9 +317,24 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             None => return false,
         },
     };
+
+    let target_dim = snap
+        .guests
+        .values()
+        .next()
+        .map(|g| Dim::from_id(&g.dimension))
+        .unwrap_or_else(|| {
+            snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
+        });
+
+    let is_hot_rollback = slot == "default" && game.dim == target_dim;
+    if !is_hot_rollback {
+        let _ = game.save.flush();
+    }
+    let disk_files_changed = restore_disk_files_for_slot(&game.world_root, slot);
+
     bench_begin(&format!("ROLLBACK RESTORE [{}]", slot), game.world.game_time);
     bench_add_players(snap.guests.len());
-    restore_disk_files_for_slot(&game.world_root, slot);
     let policy = &snap.policy;
 
     if policy.world_time {
@@ -407,6 +421,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         "dimensions/minecraft/the_nether",
         "dimensions/minecraft/the_end",
     ];
+    let mut deleted_region_files = false;
     for dim_path in dims {
         for sub in subfolders {
             let rdir = game.world_root.join(dim_path).join(sub);
@@ -415,34 +430,28 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                     let p = e.path();
                     if p.is_file() && !snap.region_files.contains(&p) {
                         let _ = fs::remove_file(&p);
+                        deleted_region_files = true;
                     }
                 }
             }
         }
     }
 
-    let target_dim = snap
-        .guests
-        .values()
-        .next()
-        .map(|g| Dim::from_id(&g.dimension))
-        .unwrap_or_else(|| {
-            snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
-        });
-
-    if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
-        &game.res,
-        &game.pack,
-        &game.options,
-        &game.settings,
-        &game.world_root,
-        target_dim,
-        game.world.shape,
-        game.level.seed,
-        &game.level.enabled_features,
-    ) {
-        game.streaming = fresh_streaming;
-        game.save = fresh_save;
+    if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || !is_hot_rollback {
+        if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
+            &game.res,
+            &game.pack,
+            &game.options,
+            &game.settings,
+            &game.world_root,
+            target_dim,
+            game.world.shape,
+            game.level.seed,
+            &game.level.enabled_features,
+        ) {
+            game.streaming = fresh_streaming;
+            game.save = fresh_save;
+        }
     }
 
     bench_accum(Phase::ServerGlobals, t_globals);
