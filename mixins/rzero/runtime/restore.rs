@@ -339,7 +339,6 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.ui.clock.rate = snap.time_rate;
         game.ui.clock.paused = snap.clock_frozen;
     }
-    game.portals.travel = None;
     game.portals.player.cooldown = 80;
     game.server_trips.clear();
     if policy.world_difficulty {

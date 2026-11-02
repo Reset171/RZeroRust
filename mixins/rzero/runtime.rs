@@ -462,6 +462,7 @@ pub struct FallingSnapshot {
     pub velocity: Vec3,
     pub age: i32,
     pub no_gravity: bool,
+    pub portal: horizon_client::nether_portal::PortalState,
     pub drop_item: bool,
     pub fall_distance: f64,
     pub stuck: Vec3,
@@ -480,6 +481,7 @@ impl FallingSnapshot {
             velocity: f.velocity,
             age: f.age,
             no_gravity: f.no_gravity,
+            portal: f.portal.clone(),
             drop_item: f.drop_item,
             fall_distance: f.fall_distance,
             stuck: f.stuck,
@@ -498,6 +500,7 @@ impl FallingSnapshot {
             velocity: self.velocity,
             age: self.age,
             no_gravity: self.no_gravity,
+            portal: self.portal.clone(),
             drop_item: self.drop_item,
             fall_distance: self.fall_distance,
             stuck: self.stuck,
@@ -2040,7 +2043,6 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.ui.clock.rate = snap.time_rate;
         game.ui.clock.paused = snap.clock_frozen;
     }
-    game.portals.travel = None;
     game.portals.player.cooldown = 80;
     game.server_trips.clear();
     if policy.world_difficulty {
