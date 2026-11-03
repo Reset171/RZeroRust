@@ -212,7 +212,7 @@ pub fn apply_level_snapshot_in_place(
         game.boats.clone_from(&snap.boats);
         game.carts.clone_from(&snap.carts);
         game.tnts.clone_from(&snap.tnts);
-        game.falling = snap.falling.iter().map(FallingSnapshot::to_live).collect();
+        game.falling = snap.falling.iter().map(FallingSnapshot::to_live).collect::<Vec<_>>().into();
         game.paintings.clone_from(&snap.paintings);
         game.item_frames.clone_from(&snap.item_frames);
         game.armor_stands.clone_from(&snap.armor_stands);

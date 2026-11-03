@@ -45,6 +45,7 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct FallingSnapshot {
+    pub join: horizon_client::join_seq::JoinSeq,
     pub id: u32,
     pub state: BlockStateId,
     pub start_pos: BlockPos,
@@ -64,6 +65,7 @@ pub struct FallingSnapshot {
 impl FallingSnapshot {
     pub fn from_live(f: &FallingBlock) -> Self {
         Self {
+            join: f.join,
             id: f.id,
             state: f.state,
             start_pos: f.start_pos,
@@ -83,6 +85,7 @@ impl FallingSnapshot {
 
     pub fn to_live(&self) -> FallingBlock {
         FallingBlock {
+            join: self.join,
             id: self.id,
             state: self.state,
             start_pos: self.start_pos,
@@ -217,17 +220,17 @@ pub struct LevelSnapshot {
     pub piston_pushes: Vec<(BlockPos, MovingPiston, f32)>,
     pub block_events: Vec<BlockEventData>,
     pub hoppers: HashMap<(i32, i32, i32), HopperState>,
-    pub mobs: Vec<Mob>,
-    pub dropped: Vec<ItemEntity>,
-    pub orbs: Vec<ExperienceOrb>,
-    pub projectiles: Vec<horizon_client::projectiles::Projectile>,
-    pub boats: Vec<Boat>,
-    pub carts: Vec<Minecart>,
-    pub tnts: Vec<PrimedTnt>,
+    pub mobs: horizon_client::join_seq::JoinList<Mob>,
+    pub dropped: horizon_client::join_seq::JoinList<ItemEntity>,
+    pub orbs: horizon_client::join_seq::JoinList<ExperienceOrb>,
+    pub projectiles: horizon_client::join_seq::JoinList<horizon_client::projectiles::Projectile>,
+    pub boats: horizon_client::join_seq::JoinList<Boat>,
+    pub carts: horizon_client::join_seq::JoinList<Minecart>,
+    pub tnts: horizon_client::join_seq::JoinList<PrimedTnt>,
     pub falling: Vec<FallingSnapshot>,
     pub paintings: Vec<Painting>,
     pub item_frames: Vec<ItemFrame>,
-    pub armor_stands: Vec<ArmorStand>,
+    pub armor_stands: horizon_client::join_seq::JoinList<ArmorStand>,
     pub cushions: Vec<Cushion>,
     pub others: Vec<OtherEntity>,
     pub crystals: Vec<Crystal>,
