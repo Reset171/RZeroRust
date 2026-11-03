@@ -120,3 +120,13 @@ bindings = [
   { name = "conn", ty = "u32", value = "conn" },
   { name = "command", ty = "&str", value = "command" },
 ]
+
+[[injection]]
+id = "frame-visuals"
+target = "horizon_client::game::native_visuals::Game<'_>::native_frame_visuals"
+kind = "HEAD"
+helper = "hook_frame_visuals.rs"
+bindings = [
+  { name = "game", ty = "&Game<'_>", value = "&*self" },
+  { name = "lines", ty = "&mut Vec<horizon_client::gizmos::Line>", value = "&mut *lines" },
+]

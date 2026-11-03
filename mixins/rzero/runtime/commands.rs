@@ -67,7 +67,18 @@ pub fn execute_rzero_command(
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
         "autosave" => handle_autosave_subcommand(game, &words[2..]),
         "bench" | "benchmark" => handle_bench_subcommand(),
-        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench>".to_owned(),
+        "hitboxes" | "f3" => {
+            let mode = words.get(2).copied();
+            let val = match mode {
+                Some("on" | "true" | "1") => true,
+                Some("off" | "false" | "0") => false,
+                _ => with_state(|st| !st.f3_loop_hitboxes),
+            };
+            with_state_mut(|st| st.f3_loop_hitboxes = val);
+            save_current_settings(game);
+            format!("[RZero] F3 loop hitboxes: {}", if val { "ON" } else { "OFF" })
+        }
+        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench|f3>".to_owned(),
     };
     vec![reply]
 }

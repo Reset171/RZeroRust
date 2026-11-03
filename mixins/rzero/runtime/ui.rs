@@ -62,6 +62,10 @@ pub fn populate_settings(game: &mut Game<'_>, mod_id: &str, buttons: &mut Vec<St
             if st.save_on_boss_defeat { "ON" } else { "OFF" }
         ));
         buttons.push(format!("Logs: {}", if st.logs { "ON" } else { "OFF" }));
+        buttons.push(format!(
+            "F3 Loop Hitboxes: {}",
+            if st.f3_loop_hitboxes { "ON" } else { "OFF" }
+        ));
     });
 }
 
@@ -95,6 +99,7 @@ pub fn handle_settings_click(game: &mut Game<'_>, mod_id: &str, button: usize) {
         }
         5 => st.save_on_boss_defeat = !st.save_on_boss_defeat,
         6 => st.logs = !st.logs,
+        7 => st.f3_loop_hitboxes = !st.f3_loop_hitboxes,
         _ => {}
     });
     save_current_settings(game);
@@ -120,6 +125,9 @@ pub fn load_saved_settings(game: &Game<'_>) {
         .native_setting(MOD_ID, "save_on_boss_defeat")
         .map(|v| v != "false");
     let logs = game.native_setting(MOD_ID, "logs").map(|v| v == "true");
+    let f3_hitboxes = game
+        .native_setting(MOD_ID, "f3_loop_hitboxes")
+        .map(|v| v != "false");
 
     let json_cfg = fs::read_to_string(Path::new("config").join("rzero.json"))
         .ok()
@@ -215,6 +223,9 @@ pub fn load_saved_settings(game: &Game<'_>) {
         if let Some(v) = logs {
             st.logs = v;
         }
+        if let Some(v) = f3_hitboxes {
+            st.f3_loop_hitboxes = v;
+        }
     });
 }
 
@@ -251,5 +262,10 @@ pub fn save_current_settings(game: &Game<'_>) {
             },
         );
         game.native_set_setting(MOD_ID, "logs", if st.logs { "true" } else { "false" });
+        game.native_set_setting(
+            MOD_ID,
+            "f3_loop_hitboxes",
+            if st.f3_loop_hitboxes { "true" } else { "false" },
+        );
     });
 }

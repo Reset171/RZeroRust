@@ -349,6 +349,10 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     };
     set_client_slot_snapshot(slot, client_snap);
 
+    if let Ok(mut tr) = loop_tracker().write() {
+        tr.on_checkpoint(game.world.game_time);
+    }
+
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);

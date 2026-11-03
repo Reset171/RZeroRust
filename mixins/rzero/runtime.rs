@@ -339,6 +339,7 @@ pub struct RZeroState {
     pub pending_save_request: bool,
     pub pending_load_request: bool,
     pub last_benchmark: Option<RollbackBenchmark>,
+    pub f3_loop_hitboxes: bool,
 }
 
 impl Default for RZeroState {
@@ -373,6 +374,7 @@ impl Default for RZeroState {
             pending_save_request: false,
             pending_load_request: false,
             last_benchmark: None,
+            f3_loop_hitboxes: true,
         }
     }
 }
@@ -1799,6 +1801,10 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     };
     set_client_slot_snapshot(slot, client_snap);
 
+    if let Ok(mut tr) = loop_tracker().write() {
+        tr.on_checkpoint(game.world.game_time);
+    }
+
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);
@@ -2788,6 +2794,10 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     set_client_slot_snapshot(slot, client_snap);
     bump_rollback_epoch();
 
+    if let Ok(mut tr) = loop_tracker().write() {
+        tr.on_rollback(snap.game_time);
+    }
+
     true
 }
 
@@ -3366,7 +3376,18 @@ pub fn execute_rzero_command(
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
         "autosave" => handle_autosave_subcommand(game, &words[2..]),
         "bench" | "benchmark" => handle_bench_subcommand(),
-        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench>".to_owned(),
+        "hitboxes" | "f3" => {
+            let mode = words.get(2).copied();
+            let val = match mode {
+                Some("on" | "true" | "1") => true,
+                Some("off" | "false" | "0") => false,
+                _ => with_state(|st| !st.f3_loop_hitboxes),
+            };
+            with_state_mut(|st| st.f3_loop_hitboxes = val);
+            save_current_settings(game);
+            format!("[RZero] F3 loop hitboxes: {}", if val { "ON" } else { "OFF" })
+        }
+        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench|f3>".to_owned(),
     };
     vec![reply]
 }
@@ -3988,6 +4009,10 @@ pub fn populate_settings(game: &mut Game<'_>, mod_id: &str, buttons: &mut Vec<St
             if st.save_on_boss_defeat { "ON" } else { "OFF" }
         ));
         buttons.push(format!("Logs: {}", if st.logs { "ON" } else { "OFF" }));
+        buttons.push(format!(
+            "F3 Loop Hitboxes: {}",
+            if st.f3_loop_hitboxes { "ON" } else { "OFF" }
+        ));
     });
 }
 
@@ -4021,6 +4046,7 @@ pub fn handle_settings_click(game: &mut Game<'_>, mod_id: &str, button: usize) {
         }
         5 => st.save_on_boss_defeat = !st.save_on_boss_defeat,
         6 => st.logs = !st.logs,
+        7 => st.f3_loop_hitboxes = !st.f3_loop_hitboxes,
         _ => {}
     });
     save_current_settings(game);
@@ -4046,6 +4072,9 @@ pub fn load_saved_settings(game: &Game<'_>) {
         .native_setting(MOD_ID, "save_on_boss_defeat")
         .map(|v| v != "false");
     let logs = game.native_setting(MOD_ID, "logs").map(|v| v == "true");
+    let f3_hitboxes = game
+        .native_setting(MOD_ID, "f3_loop_hitboxes")
+        .map(|v| v != "false");
 
     let json_cfg = fs::read_to_string(Path::new("config").join("rzero.json"))
         .ok()
@@ -4141,6 +4170,9 @@ pub fn load_saved_settings(game: &Game<'_>) {
         if let Some(v) = logs {
             st.logs = v;
         }
+        if let Some(v) = f3_hitboxes {
+            st.f3_loop_hitboxes = v;
+        }
     });
 }
 
@@ -4177,7 +4209,196 @@ pub fn save_current_settings(game: &Game<'_>) {
             },
         );
         game.native_set_setting(MOD_ID, "logs", if st.logs { "true" } else { "false" });
+        game.native_set_setting(
+            MOD_ID,
+            "f3_loop_hitboxes",
+            if st.f3_loop_hitboxes { "true" } else { "false" },
+        );
     });
+}
+
+// ============================================================================
+// Submodule: tracker.rs
+// ============================================================================
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct MobTimelineState {
+    pub pos: [f64; 3],
+    pub head_yaw: f32,
+    pub head_pitch: f32,
+    pub health: f32,
+}
+
+pub struct LoopTracker {
+    pub checkpoint_tick: i64,
+    pub previous_tracks: FxHashMap<u32, Vec<(i64, MobTimelineState)>>,
+    pub current_tracks: FxHashMap<u32, Vec<(i64, MobTimelineState)>>,
+}
+
+impl LoopTracker {
+    pub fn new() -> Self {
+        Self {
+            checkpoint_tick: 0,
+            previous_tracks: FxHashMap::default(),
+            current_tracks: FxHashMap::default(),
+        }
+    }
+
+    pub fn on_checkpoint(&mut self, save_tick: i64) {
+        self.checkpoint_tick = save_tick;
+        self.previous_tracks.clear();
+        self.current_tracks.clear();
+    }
+
+    pub fn on_rollback(&mut self, restore_tick: i64) {
+        self.checkpoint_tick = restore_tick;
+        self.previous_tracks = std::mem::take(&mut self.current_tracks);
+        self.current_tracks.clear();
+    }
+
+    pub fn record_tick(&mut self, now_tick: i64, mobs: &horizon_client::join_seq::JoinList<Mob>) {
+        let delta_t = now_tick - self.checkpoint_tick;
+        if delta_t < 0 {
+            return;
+        }
+        for m in mobs.iter() {
+            if m.removed {
+                continue;
+            }
+            let track = self.current_tracks.entry(m.id).or_default();
+            if track.len() > 3600 {
+                track.remove(0);
+            }
+            track.push((
+                delta_t,
+                MobTimelineState {
+                    pos: [m.position.x, m.position.y, m.position.z],
+                    head_yaw: m.head_yaw,
+                    head_pitch: m.head_pitch,
+                    health: m.health,
+                },
+            ));
+        }
+    }
+
+    pub fn get_mob_color(
+        &self,
+        mob_id: u32,
+        now_tick: i64,
+        current_pos: [f64; 3],
+        current_yaw: f32,
+        current_hp: f32,
+    ) -> u32 {
+        let Some(prev_track) = self.previous_tracks.get(&mob_id) else {
+            // Моб не был в прошлой петле -> Белая обводка
+            return 0xFFFF_FFFF;
+        };
+
+        if prev_track.is_empty() {
+            return 0xFFFF_FFFF;
+        }
+
+        let delta_t = (now_tick - self.checkpoint_tick).max(0);
+        let frame = match prev_track.binary_search_by_key(&delta_t, |&(t, _)| t) {
+            Ok(idx) => Some(&prev_track[idx].1),
+            Err(idx) => {
+                if idx == 0 {
+                    prev_track.first().map(|(_, f)| f)
+                } else if idx >= prev_track.len() {
+                    prev_track.last().map(|(_, f)| f)
+                } else {
+                    let (t_left, f_left) = &prev_track[idx - 1];
+                    let (t_right, f_right) = &prev_track[idx];
+                    if (delta_t - t_left).abs() <= (delta_t - t_right).abs() {
+                        Some(f_left)
+                    } else {
+                        Some(f_right)
+                    }
+                }
+            }
+        };
+
+        let Some(prev_state) = frame else {
+            return 0xFFFF_FFFF;
+        };
+
+        let dx = current_pos[0] - prev_state.pos[0];
+        let dy = current_pos[1] - prev_state.pos[1];
+        let dz = current_pos[2] - prev_state.pos[2];
+        let dist_sq = dx * dx + dy * dy + dz * dz;
+
+        let mut dyaw = (current_yaw - prev_state.head_yaw).abs() % 360.0;
+        if dyaw > 180.0 {
+            dyaw = 360.0 - dyaw;
+        }
+
+        let dhp = (current_hp - prev_state.health).abs();
+
+        // Порог совпадения действий: смещение до 0.35 блока, поворот головы до 40 градусов
+        if dist_sq <= (0.35 * 0.35) && dyaw <= 40.0 && dhp < 0.5 {
+            // Зеленая: моб делает те же действия из прошлой петли
+            0xFF22_FF55
+        } else {
+            // Красная: моб делает другие действия
+            0xFFFF_3333
+        }
+    }
+}
+
+static LOOP_TRACKER: OnceLock<RwLock<LoopTracker>> = OnceLock::new();
+
+pub fn loop_tracker() -> &'static RwLock<LoopTracker> {
+    LOOP_TRACKER.get_or_init(|| RwLock::new(LoopTracker::new()))
+}
+
+pub fn process_hitbox_lines(game: &Game<'_>, lines: &mut Vec<horizon_client::gizmos::Line>) {
+    let enabled = with_state(|st| st.f3_loop_hitboxes);
+    if !enabled {
+        return;
+    }
+
+    let tracker_guard = match loop_tracker().read() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+
+    let now_tick = game.world.game_time;
+
+    for m in game.mobs.iter() {
+        if m.removed || m.invisible {
+            continue;
+        }
+        let pos = [m.position.x, m.position.y, m.position.z];
+        let color = tracker_guard.get_mob_color(m.id, now_tick, pos, m.head_yaw, m.health);
+
+        if color == 0xFFFF_FFFF {
+            // Белая по умолчанию
+            continue;
+        }
+
+        let half = f64::from(m.width()) / 2.0;
+        let min_x = pos[0] - half - 0.08;
+        let max_x = pos[0] + half + 0.08;
+        let min_y = pos[1] - 0.08;
+        let max_y = pos[1] + f64::from(m.height()) + 0.08;
+        let min_z = pos[2] - half - 0.08;
+        let max_z = pos[2] + half + 0.08;
+
+        for line in lines.iter_mut() {
+            if line.color == 0xFFFF_FFFF {
+                let inside_start = line.start[0] >= min_x && line.start[0] <= max_x
+                    && line.start[1] >= min_y && line.start[1] <= max_y
+                    && line.start[2] >= min_z && line.start[2] <= max_z;
+                let inside_end = line.end[0] >= min_x && line.end[0] <= max_x
+                    && line.end[1] >= min_y && line.end[1] <= max_y
+                    && line.end[2] >= min_z && line.end[2] <= max_z;
+                if inside_start && inside_end {
+                    line.color = color;
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -4362,6 +4583,12 @@ pub fn handle_tick(game: &mut Game<'_>) {
         apply_client_level_rollback(game, "default");
         rollback_checkpoint_on_server(game);
         return;
+    }
+
+    if with_state(|st| st.has_checkpoint) {
+        if let Ok(mut tr) = loop_tracker().write() {
+            tr.record_tick(game.world.game_time, &game.mobs);
+        }
     }
 
     tick_autosave_on_server(game);

@@ -1008,5 +1008,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     set_client_slot_snapshot(slot, client_snap);
     bump_rollback_epoch();
 
+    if let Ok(mut tr) = loop_tracker().write() {
+        tr.on_rollback(snap.game_time);
+    }
+
     true
 }

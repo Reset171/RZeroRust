@@ -270,6 +270,7 @@ pub struct RZeroState {
     pub pending_save_request: bool,
     pub pending_load_request: bool,
     pub last_benchmark: Option<RollbackBenchmark>,
+    pub f3_loop_hitboxes: bool,
 }
 
 impl Default for RZeroState {
@@ -304,6 +305,7 @@ impl Default for RZeroState {
             pending_save_request: false,
             pending_load_request: false,
             last_benchmark: None,
+            f3_loop_hitboxes: true,
         }
     }
 }

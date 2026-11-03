@@ -190,6 +190,12 @@ pub fn handle_tick(game: &mut Game<'_>) {
         return;
     }
 
+    if with_state(|st| st.has_checkpoint) {
+        if let Ok(mut tr) = loop_tracker().write() {
+            tr.record_tick(game.world.game_time, &game.mobs);
+        }
+    }
+
     tick_autosave_on_server(game);
 }
 

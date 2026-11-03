@@ -22,6 +22,7 @@ fn assemble_runtime() {
         "persistence.rs",
         "commands.rs",
         "ui.rs",
+        "tracker.rs",
         "hooks.rs",
     ];
 
