@@ -327,9 +327,6 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     let is_hot_rollback = slot == "default"
         && game.dim == target_dim
         && snap.levels.contains_key(&game.dim);
-    if !is_hot_rollback {
-        let _ = game.save.flush();
-    }
     let disk_files_changed = restore_disk_files_for_slot(&game.world_root, slot);
 
     bench_begin(&format!("ROLLBACK RESTORE [{}]", slot), game.world.game_time);
@@ -491,6 +488,49 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         acc_blocks_ms += b;
         acc_containers_ms += c;
         acc_entities_ms += e;
+    } else {
+        let (px, pz) = game
+            .player
+            .as_ref()
+            .map_or((0, 0), |p| ((p.position.x as i32) >> 4, (p.position.z as i32) >> 4));
+        let radius = 6;
+        for dz in -radius..=radius {
+            for dx in -radius..=radius {
+                let cx = px + dx;
+                let cz = pz + dz;
+                if let Some(disk_chunk) = game.save.load(cx, cz, game.pack.assets.registry, game.res.biomes()) {
+                    if let Some(live_chunk) = game.world.chunks.get(&(cx, cz)) {
+                        let min_y = disk_chunk.min_y();
+                        for (s_idx, disk_sec) in disk_chunk.sections.iter().enumerate() {
+                            let Some(live_sec) = live_chunk.sections.get(s_idx) else {
+                                continue;
+                            };
+                            if disk_sec.blocks == live_sec.blocks {
+                                continue;
+                            }
+                            let y_base = min_y + (s_idx as i32) * 16;
+                            let x_base = cx * 16;
+                            let z_base = cz * 16;
+                            for sy in 0..16 {
+                                for sz in 0..16 {
+                                    for sx in 0..16 {
+                                        let idx = ((sy << 8) | (sz << 4) | sx) as usize;
+                                        let want = disk_sec.get(idx);
+                                        if live_sec.get(idx) != want {
+                                            let pos = (x_base + sx, y_base + sy, z_base + sz);
+                                            if let Some(log) = game.world.block_log.as_mut() {
+                                                log.push(pos);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    game.world.chunks.insert((cx, cz), Arc::new(disk_chunk));
+                }
+            }
+        }
     }
 
     let t_player = std::time::Instant::now();
@@ -682,14 +722,17 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                     }));
                 }
 
-                let active_snap_chunks = snap.levels.get(&game.dim).map(|l| &l.chunks);
-                let forget: Vec<_> = g.sent_chunks.iter().copied().collect();
-                for (x, z) in forget {
-                    let in_snap = active_snap_chunks.is_some_and(|c| c.contains_key(&(x, z)));
-                    if !in_snap {
-                        g.sent_chunks.remove(&(x, z));
-                        g.send(&C::ForgetLevelChunk(play::ForgetLevelChunk { pos: [x, z] }));
+                if let Some(active_snap_chunks) = snap.levels.get(&game.dim).map(|l| &l.chunks) {
+                    let forget: Vec<_> = g.sent_chunks.iter().copied().collect();
+                    for (x, z) in forget {
+                        let in_snap = active_snap_chunks.contains_key(&(x, z));
+                        if !in_snap {
+                            g.sent_chunks.remove(&(x, z));
+                            g.send(&C::ForgetLevelChunk(play::ForgetLevelChunk { pos: [x, z] }));
+                        }
                     }
+                } else {
+                    g.sent_chunks.clear();
                 }
 
                 let dragon_bar_id = horizon_client::bossbar::stable_uuid("minecraft:ender_dragon");

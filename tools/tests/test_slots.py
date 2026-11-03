@@ -39,3 +39,41 @@ def test_11_slots_branching(h):
     # 6. Очистка слотов
     h.rzero("slot delete slot_alpha")
     h.rzero("slot delete slot_beta")
+
+
+def test_41_disk_checkpoint_reopen_and_rollback(h):
+    setup_clean_env(h)
+    h.tp(0.5, 65.0, 0.5)
+    h.wait(8)
+    h.command("setblock 0 65 2 minecraft:stone")
+    h.wait(4)
+
+    # 1. Сохраняем чекпоинт на диск
+    h.rzero("set")
+    h.wait(6)
+
+    # 2. Модифицируем мир (ставим обсидиан)
+    h.command("setblock 0 65 2 minecraft:obsidian")
+    h.wait(4)
+    b_mod = h.block(0, 65, 2)
+    assert "obsidian" in b_mod.get("block", ""), f"Obsidian was not placed: {b_mod}"
+
+    # 3. Симулируем перезаход в мир: очищаем RAM (сброс снапшота в памяти)
+    h.rzero("purge_memory")
+    h.wait(4)
+
+    # 4. Выполняем откат с диска
+    h.rzero("load")
+    h.wait(10)
+
+    # 5. Проверка: блок откатился к stone, чанк полностью загружен (не рентген, loaded=True)
+    b_restored = h.block(0, 65, 2)
+    assert b_restored.get("loaded") is True, f"Chunk was dropped/xray after disk rollback: {b_restored}"
+    assert "stone" in b_restored.get("block", ""), f"Block was not restored from disk checkpoint: {b_restored}"
+
+    # 6. Проверка окружающего блока земли под ногами (твердый блок не превратился в пустоту)
+    ground = h.block(0, 64, 0)
+    assert ground.get("loaded") is True and "air" not in ground.get("block", ""), f"Ground became xray air: {ground}"
+
+    h.command("setblock 0 65 2 minecraft:air")
+    h.wait(4)

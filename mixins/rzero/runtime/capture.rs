@@ -339,7 +339,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         mob_players: game.lan.as_ref().map(|h| h.mob_players.clone()).unwrap_or_default(),
     });
 
-    let _ = game.save.flush();
+    let _ = game.save_game_with(true);
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
 

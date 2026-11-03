@@ -37,7 +37,10 @@ from tools.tests.test_death_rewind import (
     test_10_multiple_fall_cycles,
     test_18_drowning_and_damage_after_rewind,
 )
-from tools.tests.test_slots import test_11_slots_branching
+from tools.tests.test_slots import (
+    test_11_slots_branching,
+    test_41_disk_checkpoint_reopen_and_rollback,
+)
 from tools.tests.test_policies import test_12_policy_selective_inventory
 from tools.tests.test_containers import (
     test_14_chest_container_rollback,
@@ -154,6 +157,7 @@ def build_test_catalog():
         (38, "Test 38: Chest Loot Table Preservation", "determinism", test_38_chest_loot_table_determinism),
         (39, "Test 39: Explored Map Fog of War Rollback", "determinism", test_39_explored_map_fog_of_war),
         (40, "Test 40: Subchunk Palette Bounds Y 318 and -50", "determinism", test_40_subchunk_palette_expansion_bounds),
+        (41, "Test 41: Disk Checkpoint Reopen and Anti-XRay Rollback", "slots", test_41_disk_checkpoint_reopen_and_rollback),
     ]
 
 

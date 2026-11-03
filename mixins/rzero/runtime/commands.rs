@@ -57,6 +57,10 @@ pub fn execute_rzero_command(
             }
         }
         "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
+        "purge_memory" => {
+            clear_snapshot();
+            "[RZero] In-memory snapshots cleared.".to_owned()
+        }
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
         "autosave" => handle_autosave_subcommand(game, &words[2..]),
         "bench" | "benchmark" => handle_bench_subcommand(),
