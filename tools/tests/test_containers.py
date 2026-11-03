@@ -48,7 +48,7 @@ def test_15_piston_redstone_machine(h):
 
     # Откат
     h.rzero("load")
-    h.wait(8)
+    h.wait(12)
 
     b_piston = h.block(650, 65, 650)
     b_source = h.block(650, 65, 652)

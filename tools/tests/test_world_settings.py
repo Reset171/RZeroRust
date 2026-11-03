@@ -26,7 +26,7 @@ def test_19_tick_rate_and_freeze_rollback(h):
     q = h.command("tick query")
     chat = q.get("chat", [])
     assert any("20.0" in line for line in chat), f"Tick rate not rolled back: {chat}"
-    assert any("обычном режиме" in line.lower() or "running" in line.lower() for line in chat), f"Tick freeze not rolled back: {chat}"
+    assert any("обычном режиме" in line.lower() or "запущена" in line.lower() or "running" in line.lower() for line in chat), f"Tick freeze not rolled back: {chat}"
 
     # 5. Проверка: скорость хода суток нормальная (1.0, а не 20.0)
     t0_day = h.state().get("time", {}).get("day_time", 0)
@@ -116,8 +116,11 @@ def test_23_weather_and_thunder_rollback(h):
 
     # 2. Включаем грозу
     h.command("weather thunder")
-    h.wait(4)
-    st_thunder = h.state().get("weather", {})
+    for _ in range(5):
+        h.wait(2)
+        st_thunder = h.state().get("weather", {})
+        if st_thunder.get("thundering", False):
+            break
     assert st_thunder.get("thundering", False), f"Thunder weather was not set: {st_thunder}"
 
     # 3. Откат

@@ -45,6 +45,7 @@ def test_41_disk_checkpoint_reopen_and_rollback(h):
     setup_clean_env(h)
     h.tp(0.5, 65.0, 0.5)
     h.wait(8)
+    h.command("setblock 0 64 2 minecraft:stone")
     h.command("setblock 0 65 2 minecraft:stone")
     h.wait(4)
 

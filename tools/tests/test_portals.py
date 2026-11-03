@@ -37,7 +37,10 @@ def test_24_nether_portal_cold_chunk(h):
 def test_25_flying_ender_pearl_discard(h):
     setup_clean_env(h)
     h.tp(0.5, 65, 0.5)
-    h.wait(8)
+    for _ in range(10):
+        h.wait(2)
+        if abs(h.state()["player"]["position"][0] - 0.5) < 1.0:
+            break
     base_pos = h.state()["player"]["position"]
 
     # 1. Чекпоинт на безопасной площадке

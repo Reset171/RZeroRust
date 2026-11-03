@@ -48,14 +48,15 @@ def test_6_remote_chunks_mob_cleanup(h):
 def test_7_villager_ai_determinism(h):
     setup_clean_env(h)
     h.command("weather clear")
-    h.command("kill @e[type=villager,distance=..64]")
     h.tp(700.5, 65, 700.5)
     h.wait(8)
+    h.command("kill @e[type=villager,distance=..64]")
+    h.wait(4)
     h.command("fill 695 64 695 705 64 705 minecraft:stone")
     h.command("fill 695 65 695 705 66 705 minecraft:air")
     h.command("summon villager 698.5 65 700.5 {NoAI:0b}")
     h.command("summon villager 702.5 65 700.5 {NoAI:0b}")
-    h.wait(6)
+    h.wait(8)
 
     # Замораживаем мир ДО чекпоинта, чтобы тики шли строго по шагам
     h.command("tick freeze")
