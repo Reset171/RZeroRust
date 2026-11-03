@@ -275,6 +275,69 @@ pub struct TimelineSnapshot {
     pub mob_players: FxHashMap<u32, u32>,
 }
 
+#[derive(Clone)]
+pub struct ClientBlockSnapshot {
+    pub dim: Dim,
+    pub chunks: FxHashMap<(i32, i32), Arc<Chunk>>,
+}
+
+static CLIENT_SNAPSHOT: OnceLock<RwLock<Option<ClientBlockSnapshot>>> = OnceLock::new();
+static CLIENT_SLOTS: OnceLock<RwLock<FxHashMap<String, ClientBlockSnapshot>>> = OnceLock::new();
+
+fn client_snapshot_lock() -> &'static RwLock<Option<ClientBlockSnapshot>> {
+    CLIENT_SNAPSHOT.get_or_init(|| RwLock::new(None))
+}
+
+fn client_slots_lock() -> &'static RwLock<FxHashMap<String, ClientBlockSnapshot>> {
+    CLIENT_SLOTS.get_or_init(|| RwLock::new(FxHashMap::default()))
+}
+
+pub fn get_client_snapshot_clone() -> Option<ClientBlockSnapshot> {
+    client_snapshot_lock().read().ok()?.clone()
+}
+
+pub fn set_client_snapshot(snap: Option<ClientBlockSnapshot>) {
+    if let Ok(mut lock) = client_snapshot_lock().write() {
+        *lock = snap;
+    }
+}
+
+pub fn get_client_slot_snapshot_clone(slot: &str) -> Option<ClientBlockSnapshot> {
+    if slot == "default" {
+        return get_client_snapshot_clone();
+    }
+    client_slots_lock().read().ok()?.get(slot).cloned()
+}
+
+pub fn set_client_slot_snapshot(slot: &str, snap: ClientBlockSnapshot) {
+    if slot == "default" {
+        set_client_snapshot(Some(snap));
+        return;
+    }
+    if let Ok(mut lock) = client_slots_lock().write() {
+        lock.insert(slot.to_owned(), snap);
+    }
+}
+
+use std::sync::atomic::{AtomicU64, Ordering};
+
+pub static ROLLBACK_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+pub fn bump_rollback_epoch() {
+    ROLLBACK_EPOCH.fetch_add(1, Ordering::SeqCst);
+}
+
+pub fn get_rollback_epoch() -> u64 {
+    ROLLBACK_EPOCH.load(Ordering::SeqCst)
+}
+
+pub fn clear_client_snapshots() {
+    set_client_snapshot(None);
+    if let Ok(mut lock) = client_slots_lock().write() {
+        lock.clear();
+    }
+}
+
 std::thread_local! {
     pub static SNAPSHOT: RefCell<Option<Arc<TimelineSnapshot>>> = const { RefCell::new(None) };
     pub static SLOTS: RefCell<HashMap<String, Arc<TimelineSnapshot>>> = RefCell::new(HashMap::new());

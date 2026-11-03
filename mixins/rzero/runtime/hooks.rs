@@ -5,7 +5,7 @@ use super::super::{
 use super::adaptive::tick_autosave_on_server;
 use super::capture::create_checkpoint_on_server;
 use super::persistence::{has_disk_checkpoint, load_checkpoint_from_disk};
-use super::restore::rollback_checkpoint_on_server;
+use super::restore::{apply_client_level_rollback, rollback_checkpoint_on_server};
 use super::snapshots::*;
 use super::types::*;
 use super::ui::{load_saved_settings, save_current_settings};
@@ -34,6 +34,7 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
     } else if key == load_key {
         game.close_container();
         game.screen = super::super::Screen::Playing;
+        apply_client_level_rollback(game, "default");
         if let Some(server) = &game.integrated {
             let msg = server.call(|srv| {
                 if rollback_checkpoint_on_server(srv) {
@@ -135,6 +136,7 @@ pub fn handle_tick(game: &mut Game<'_>) {
                 p.health.hurt_dir = 0.0;
                 p.health.indicated_dir = None;
             }
+            apply_client_level_rollback(game, "default");
             if let Some(server) = &game.integrated {
                 server.call(|srv| {
                     rollback_checkpoint_on_server(srv);
@@ -150,6 +152,27 @@ pub fn handle_tick(game: &mut Game<'_>) {
         return;
     }
 
+    if game.remote.is_some() {
+        let current_epoch = get_rollback_epoch();
+        std::thread_local! {
+            static CLIENT_LAST_EPOCH: RefCell<u64> = const { RefCell::new(0) };
+        }
+        let needs_client_rollback = CLIENT_LAST_EPOCH.with(|cell| {
+            let mut last = cell.borrow_mut();
+            if *last != current_epoch {
+                *last = current_epoch;
+                true
+            } else {
+                false
+            }
+        });
+
+        if needs_client_rollback && current_epoch > 0 {
+            let slot = with_state(|st| st.current_slot.clone());
+            apply_client_level_rollback(game, &slot);
+        }
+    }
+
     let (do_save, do_load, dead_rollback) = with_state_mut(|st| {
         (
             std::mem::replace(&mut st.pending_save_request, false),
@@ -162,6 +185,7 @@ pub fn handle_tick(game: &mut Game<'_>) {
         create_checkpoint_on_server(game, None);
     }
     if do_load || dead_rollback.is_some() {
+        apply_client_level_rollback(game, "default");
         rollback_checkpoint_on_server(game);
         return;
     }

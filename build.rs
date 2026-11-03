@@ -89,7 +89,10 @@ use std::{
     io::{Read, Write},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock, RwLock,
+    },
     time::Instant,
 };
 "#;

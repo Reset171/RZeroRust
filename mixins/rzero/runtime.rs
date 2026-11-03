@@ -62,7 +62,10 @@ use std::{
     io::{Read, Write},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock, RwLock,
+    },
     time::Instant,
 };
 
@@ -682,6 +685,68 @@ pub struct TimelineSnapshot {
     pub offline_player_data: HashMap<PathBuf, Vec<u8>>,
     pub levels: HashMap<Dim, LevelSnapshot>,
     pub mob_players: FxHashMap<u32, u32>,
+}
+
+#[derive(Clone)]
+pub struct ClientBlockSnapshot {
+    pub dim: Dim,
+    pub chunks: FxHashMap<(i32, i32), Arc<Chunk>>,
+}
+
+static CLIENT_SNAPSHOT: OnceLock<RwLock<Option<ClientBlockSnapshot>>> = OnceLock::new();
+static CLIENT_SLOTS: OnceLock<RwLock<FxHashMap<String, ClientBlockSnapshot>>> = OnceLock::new();
+
+fn client_snapshot_lock() -> &'static RwLock<Option<ClientBlockSnapshot>> {
+    CLIENT_SNAPSHOT.get_or_init(|| RwLock::new(None))
+}
+
+fn client_slots_lock() -> &'static RwLock<FxHashMap<String, ClientBlockSnapshot>> {
+    CLIENT_SLOTS.get_or_init(|| RwLock::new(FxHashMap::default()))
+}
+
+pub fn get_client_snapshot_clone() -> Option<ClientBlockSnapshot> {
+    client_snapshot_lock().read().ok()?.clone()
+}
+
+pub fn set_client_snapshot(snap: Option<ClientBlockSnapshot>) {
+    if let Ok(mut lock) = client_snapshot_lock().write() {
+        *lock = snap;
+    }
+}
+
+pub fn get_client_slot_snapshot_clone(slot: &str) -> Option<ClientBlockSnapshot> {
+    if slot == "default" {
+        return get_client_snapshot_clone();
+    }
+    client_slots_lock().read().ok()?.get(slot).cloned()
+}
+
+pub fn set_client_slot_snapshot(slot: &str, snap: ClientBlockSnapshot) {
+    if slot == "default" {
+        set_client_snapshot(Some(snap));
+        return;
+    }
+    if let Ok(mut lock) = client_slots_lock().write() {
+        lock.insert(slot.to_owned(), snap);
+    }
+}
+
+
+pub static ROLLBACK_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+pub fn bump_rollback_epoch() {
+    ROLLBACK_EPOCH.fetch_add(1, Ordering::SeqCst);
+}
+
+pub fn get_rollback_epoch() -> u64 {
+    ROLLBACK_EPOCH.load(Ordering::SeqCst)
+}
+
+pub fn clear_client_snapshots() {
+    set_client_snapshot(None);
+    if let Ok(mut lock) = client_slots_lock().write() {
+        lock.clear();
+    }
 }
 
 std::thread_local! {
@@ -1728,6 +1793,12 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
 
+    let client_snap = ClientBlockSnapshot {
+        dim: game.dim,
+        chunks: game.world.chunks.clone(),
+    };
+    set_client_slot_snapshot(slot, client_snap);
+
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);
@@ -2000,6 +2071,119 @@ pub fn apply_level_snapshot_in_place(
     bench_accum(Phase::SpawnNbt, t_entities);
     let entities_ms = (std::time::Instant::now() - t_entities).as_secs_f64() * 1000.0;
     (blocks_ms, containers_ms, entities_ms)
+}
+
+pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
+    let _ = game.stop_remote_mining();
+
+    let client_snap = match get_client_slot_snapshot_clone(slot) {
+        Some(s) => s,
+        None => {
+            let (px, pz) = game
+                .player
+                .as_ref()
+                .map(|p| ((p.position.x as i32) >> 4, (p.position.z as i32) >> 4))
+                .unwrap_or((0, 0));
+
+            let mut candidate_chunks = game.world.modified.clone();
+            for dz in -3..=3 {
+                for dx in -3..=3 {
+                    candidate_chunks.insert((px + dx, pz + dz));
+                }
+            }
+
+            let mut diffs = Vec::new();
+            for (cx, cz) in candidate_chunks {
+                if let Some(live_chunk) = game.world.chunks.get(&(cx, cz)) {
+                    if let Some(disk_chunk) = game.save.load(cx, cz, game.pack.assets.registry, game.res.biomes()) {
+                        let min_y = disk_chunk.min_y();
+                        for (s_idx, disk_sec) in disk_chunk.sections.iter().enumerate() {
+                            let Some(live_sec) = live_chunk.sections.get(s_idx) else {
+                                continue;
+                            };
+                            if disk_sec.blocks == live_sec.blocks {
+                                continue;
+                            }
+                            let y_base = min_y + (s_idx as i32) * 16;
+                            let x_base = cx * 16;
+                            let z_base = cz * 16;
+                            for sy in 0..16 {
+                                for sz in 0..16 {
+                                    for sx in 0..16 {
+                                        let idx = ((sy << 8) | (sz << 4) | sx) as usize;
+                                        let want = disk_sec.get(idx);
+                                        if live_sec.get(idx) != want {
+                                            diffs.push((x_base + sx, y_base + sy, z_base + sz, want));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for (x, y, z, want) in diffs {
+                let _ = game.world.set(x, y, z, BlockStateId(want));
+            }
+            return;
+        }
+    };
+
+    if game.dim != client_snap.dim {
+        return;
+    }
+
+    let old_chunks = game.world.chunks.clone();
+    let mut changed_coords = Vec::new();
+
+    for (&(cx, cz), snap_chunk) in client_snap.chunks.iter() {
+        if let Some(live_chunk) = old_chunks.get(&(cx, cz)) {
+            if Arc::ptr_eq(live_chunk, snap_chunk) {
+                continue;
+            }
+            let min_y = snap_chunk.min_y();
+            for (s_idx, snap_sec) in snap_chunk.sections.iter().enumerate() {
+                let Some(live_sec) = live_chunk.sections.get(s_idx) else {
+                    continue;
+                };
+                if Arc::ptr_eq(live_sec, snap_sec) {
+                    continue;
+                }
+                if let (Some(u1), Some(u2)) = (snap_sec.blocks.uniform(), live_sec.blocks.uniform()) {
+                    if u1 == u2 {
+                        continue;
+                    }
+                }
+                if snap_sec.blocks == live_sec.blocks {
+                    continue;
+                }
+
+                let y_base = min_y + (s_idx as i32) * 16;
+                let x_base = cx * 16;
+                let z_base = cz * 16;
+                for sy in 0..16 {
+                    for sz in 0..16 {
+                        for sx in 0..16 {
+                            let idx = ((sy << 8) | (sz << 4) | sx) as usize;
+                            let want = snap_sec.get(idx);
+                            if live_sec.get(idx) != want {
+                                changed_coords.push((
+                                    x_base + sx,
+                                    y_base + sy,
+                                    z_base + sz,
+                                    want,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (wx, wy, wz, want) in changed_coords {
+        let _ = game.world.set(wx, wy, wz, BlockStateId(want));
+    }
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -2596,6 +2780,14 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);
+
+    let client_snap = ClientBlockSnapshot {
+        dim: game.dim,
+        chunks: game.world.chunks.clone(),
+    };
+    set_client_slot_snapshot(slot, client_snap);
+    bump_rollback_epoch();
+
     true
 }
 
@@ -3142,6 +3334,7 @@ pub fn execute_rzero_command(
         }
         "load" | "rollback" => {
             let slot = words.get(2).copied().unwrap_or("default");
+            apply_client_level_rollback(game, slot);
             if rollback_slot_checkpoint_on_server(game, slot) {
                 with_state_mut(|st| st.current_slot = slot.to_owned());
                 format!(
@@ -3157,6 +3350,7 @@ pub fn execute_rzero_command(
         "metrics" => report_metrics_json(game),
         "rewind" => {
             let slot = words.get(2).copied().unwrap_or("default");
+            apply_client_level_rollback(game, slot);
             if rollback_slot_checkpoint_on_server(game, slot) {
                 format!("[RZero] Immediate rewind executed to slot '{}'.", slot)
             } else {
@@ -3166,6 +3360,7 @@ pub fn execute_rzero_command(
         "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
         "purge_memory" => {
             clear_snapshot();
+            clear_client_snapshots();
             "[RZero] In-memory snapshots cleared.".to_owned()
         }
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
@@ -3222,6 +3417,7 @@ pub fn handle_slot_subcommand(
         }
         "load" => {
             let name = args.get(1).copied().unwrap_or("default");
+            apply_client_level_rollback(game, name);
             if rollback_slot_checkpoint_on_server(game, name) {
                 with_state_mut(|st| st.current_slot = name.to_owned());
                 format!("[RZero] Rolled back to slot '{}'.", name)
@@ -4012,6 +4208,7 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
     } else if key == load_key {
         game.close_container();
         game.screen = super::super::Screen::Playing;
+        apply_client_level_rollback(game, "default");
         if let Some(server) = &game.integrated {
             let msg = server.call(|srv| {
                 if rollback_checkpoint_on_server(srv) {
@@ -4113,6 +4310,7 @@ pub fn handle_tick(game: &mut Game<'_>) {
                 p.health.hurt_dir = 0.0;
                 p.health.indicated_dir = None;
             }
+            apply_client_level_rollback(game, "default");
             if let Some(server) = &game.integrated {
                 server.call(|srv| {
                     rollback_checkpoint_on_server(srv);
@@ -4128,6 +4326,27 @@ pub fn handle_tick(game: &mut Game<'_>) {
         return;
     }
 
+    if game.remote.is_some() {
+        let current_epoch = get_rollback_epoch();
+        std::thread_local! {
+            static CLIENT_LAST_EPOCH: RefCell<u64> = const { RefCell::new(0) };
+        }
+        let needs_client_rollback = CLIENT_LAST_EPOCH.with(|cell| {
+            let mut last = cell.borrow_mut();
+            if *last != current_epoch {
+                *last = current_epoch;
+                true
+            } else {
+                false
+            }
+        });
+
+        if needs_client_rollback && current_epoch > 0 {
+            let slot = with_state(|st| st.current_slot.clone());
+            apply_client_level_rollback(game, &slot);
+        }
+    }
+
     let (do_save, do_load, dead_rollback) = with_state_mut(|st| {
         (
             std::mem::replace(&mut st.pending_save_request, false),
@@ -4140,6 +4359,7 @@ pub fn handle_tick(game: &mut Game<'_>) {
         create_checkpoint_on_server(game, None);
     }
     if do_load || dead_rollback.is_some() {
+        apply_client_level_rollback(game, "default");
         rollback_checkpoint_on_server(game);
         return;
     }

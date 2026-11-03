@@ -35,6 +35,7 @@ pub fn execute_rzero_command(
         }
         "load" | "rollback" => {
             let slot = words.get(2).copied().unwrap_or("default");
+            apply_client_level_rollback(game, slot);
             if rollback_slot_checkpoint_on_server(game, slot) {
                 with_state_mut(|st| st.current_slot = slot.to_owned());
                 format!(
@@ -50,6 +51,7 @@ pub fn execute_rzero_command(
         "metrics" => report_metrics_json(game),
         "rewind" => {
             let slot = words.get(2).copied().unwrap_or("default");
+            apply_client_level_rollback(game, slot);
             if rollback_slot_checkpoint_on_server(game, slot) {
                 format!("[RZero] Immediate rewind executed to slot '{}'.", slot)
             } else {
@@ -59,6 +61,7 @@ pub fn execute_rzero_command(
         "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
         "purge_memory" => {
             clear_snapshot();
+            clear_client_snapshots();
             "[RZero] In-memory snapshots cleared.".to_owned()
         }
         "anchor" => handle_anchor_subcommand(game, &words[2..], requester),
@@ -115,6 +118,7 @@ pub fn handle_slot_subcommand(
         }
         "load" => {
             let name = args.get(1).copied().unwrap_or("default");
+            apply_client_level_rollback(game, name);
             if rollback_slot_checkpoint_on_server(game, name) {
                 with_state_mut(|st| st.current_slot = name.to_owned());
                 format!("[RZero] Rolled back to slot '{}'.", name)

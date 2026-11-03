@@ -343,6 +343,12 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
 
+    let client_snap = ClientBlockSnapshot {
+        dim: game.dim,
+        chunks: game.world.chunks.clone(),
+    };
+    set_client_slot_snapshot(slot, client_snap);
+
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);

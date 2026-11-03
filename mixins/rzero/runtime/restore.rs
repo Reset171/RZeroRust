@@ -293,6 +293,119 @@ pub fn apply_level_snapshot_in_place(
     (blocks_ms, containers_ms, entities_ms)
 }
 
+pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
+    let _ = game.stop_remote_mining();
+
+    let client_snap = match get_client_slot_snapshot_clone(slot) {
+        Some(s) => s,
+        None => {
+            let (px, pz) = game
+                .player
+                .as_ref()
+                .map(|p| ((p.position.x as i32) >> 4, (p.position.z as i32) >> 4))
+                .unwrap_or((0, 0));
+
+            let mut candidate_chunks = game.world.modified.clone();
+            for dz in -3..=3 {
+                for dx in -3..=3 {
+                    candidate_chunks.insert((px + dx, pz + dz));
+                }
+            }
+
+            let mut diffs = Vec::new();
+            for (cx, cz) in candidate_chunks {
+                if let Some(live_chunk) = game.world.chunks.get(&(cx, cz)) {
+                    if let Some(disk_chunk) = game.save.load(cx, cz, game.pack.assets.registry, game.res.biomes()) {
+                        let min_y = disk_chunk.min_y();
+                        for (s_idx, disk_sec) in disk_chunk.sections.iter().enumerate() {
+                            let Some(live_sec) = live_chunk.sections.get(s_idx) else {
+                                continue;
+                            };
+                            if disk_sec.blocks == live_sec.blocks {
+                                continue;
+                            }
+                            let y_base = min_y + (s_idx as i32) * 16;
+                            let x_base = cx * 16;
+                            let z_base = cz * 16;
+                            for sy in 0..16 {
+                                for sz in 0..16 {
+                                    for sx in 0..16 {
+                                        let idx = ((sy << 8) | (sz << 4) | sx) as usize;
+                                        let want = disk_sec.get(idx);
+                                        if live_sec.get(idx) != want {
+                                            diffs.push((x_base + sx, y_base + sy, z_base + sz, want));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for (x, y, z, want) in diffs {
+                let _ = game.world.set(x, y, z, BlockStateId(want));
+            }
+            return;
+        }
+    };
+
+    if game.dim != client_snap.dim {
+        return;
+    }
+
+    let old_chunks = game.world.chunks.clone();
+    let mut changed_coords = Vec::new();
+
+    for (&(cx, cz), snap_chunk) in client_snap.chunks.iter() {
+        if let Some(live_chunk) = old_chunks.get(&(cx, cz)) {
+            if Arc::ptr_eq(live_chunk, snap_chunk) {
+                continue;
+            }
+            let min_y = snap_chunk.min_y();
+            for (s_idx, snap_sec) in snap_chunk.sections.iter().enumerate() {
+                let Some(live_sec) = live_chunk.sections.get(s_idx) else {
+                    continue;
+                };
+                if Arc::ptr_eq(live_sec, snap_sec) {
+                    continue;
+                }
+                if let (Some(u1), Some(u2)) = (snap_sec.blocks.uniform(), live_sec.blocks.uniform()) {
+                    if u1 == u2 {
+                        continue;
+                    }
+                }
+                if snap_sec.blocks == live_sec.blocks {
+                    continue;
+                }
+
+                let y_base = min_y + (s_idx as i32) * 16;
+                let x_base = cx * 16;
+                let z_base = cz * 16;
+                for sy in 0..16 {
+                    for sz in 0..16 {
+                        for sx in 0..16 {
+                            let idx = ((sy << 8) | (sz << 4) | sx) as usize;
+                            let want = snap_sec.get(idx);
+                            if live_sec.get(idx) != want {
+                                changed_coords.push((
+                                    x_base + sx,
+                                    y_base + sy,
+                                    z_base + sz,
+                                    want,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (wx, wy, wz, want) in changed_coords {
+        let _ = game.world.set(wx, wy, wz, BlockStateId(want));
+    }
+}
+
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
     let slot = with_state(|st| st.current_slot.clone());
     rollback_slot_checkpoint_on_server(game, &slot)
@@ -887,5 +1000,13 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);
+
+    let client_snap = ClientBlockSnapshot {
+        dim: game.dim,
+        chunks: game.world.chunks.clone(),
+    };
+    set_client_slot_snapshot(slot, client_snap);
+    bump_rollback_epoch();
+
     true
 }
