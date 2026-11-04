@@ -12,6 +12,12 @@ file = "crates/horizon-client/src/game/levels.rs"
 name = "rzero"
 source = "runtime.rs"
 
+[[module]]
+id = "hub_ext"
+file = "crates/horizon-client/src/lan/hub.rs"
+name = "rzero_hub"
+source = "hub_ext.rs"
+
 [[injection]]
 id = "native-mods"
 target = "horizon_client::game::native_hooks::Game<'_>::native_mods"

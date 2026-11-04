@@ -2733,6 +2733,8 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         if !game.level_teleports.is_empty() {
             game.run_level_teleports(&mut host);
         }
+        host.hub.rzero_reset_tracked();
+        host.hub.synced.clear();
         game.lan = Some(host);
     }
 
