@@ -175,6 +175,10 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
                         fire_ticks: -20,
                         air: 300,
                         fall_distance: 0.0,
+                        velocity: [0.0, 0.0, 0.0],
+                        food_exhaustion: 0.0,
+                        food_tick_timer: 0,
+                        ticks_frozen: 0,
                     });
                     (
                         Vec3::ZERO,

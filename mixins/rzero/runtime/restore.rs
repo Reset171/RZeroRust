@@ -813,6 +813,10 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                     fire_ticks: gs.fire_ticks,
                     air: gs.air,
                     fall_distance: gs.fall_distance,
+                    velocity: [gs.velocity.x, gs.velocity.y, gs.velocity.z],
+                    food_exhaustion: gs.exhaustion,
+                    food_tick_timer: 0,
+                    ticks_frozen: gs.ticks_frozen,
                 });
                 if let Some(m) = g.motion.as_mut() {
                     let is_invuln = gs.game_mode == 1 || gs.game_mode == 3;
