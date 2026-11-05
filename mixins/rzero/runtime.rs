@@ -749,6 +749,27 @@ pub fn get_rollback_epoch() -> u64 {
     ROLLBACK_EPOCH.load(Ordering::SeqCst)
 }
 
+std::thread_local! {
+    static CLIENT_LAST_EPOCH: RefCell<u64> = const { RefCell::new(0) };
+}
+
+pub fn sync_client_epoch() {
+    CLIENT_LAST_EPOCH.with(|cell| *cell.borrow_mut() = get_rollback_epoch());
+}
+
+pub fn client_epoch_needs_sync() -> bool {
+    let current_epoch = get_rollback_epoch();
+    CLIENT_LAST_EPOCH.with(|cell| {
+        let mut last = cell.borrow_mut();
+        if *last != current_epoch {
+            *last = current_epoch;
+            true
+        } else {
+            false
+        }
+    })
+}
+
 pub fn clear_client_snapshots() {
     set_client_snapshot(None);
     if let Ok(mut lock) = client_slots_lock().write() {
@@ -817,37 +838,45 @@ pub fn delete_slot_snapshot(slot: &str) -> bool {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
-    Prepare = 0,
-    PlayersOnline = 1,
-    OfflineFiles = 2,
-    WorldState = 3,
-    ServerGlobals = 4,
-    Scoreboard = 5,
-    ChunkBlocks = 6,
-    ChunkBeClear = 7,
-    ChunkBeLoad = 8,
-    ChunkTicks = 9,
-    ChunkPois = 10,
-    ChunkPush = 11,
-    RemoveForeign = 12,
-    SpawnNbt = 13,
-    ApplyMobRam = 14,
-    BrainRelink = 15,
-    BrainDeepClone = 16,
-    RemoveSnapshotEntities = 17,
-    DropStaleEvents = 18,
-    MenuReopen = 19,
-    CapturePlayers = 20,
-    CaptureGlobals = 21,
-    CaptureRaids = 22,
-    CaptureWorldState = 23,
-    CaptureChunks = 24,
-    CaptureBe = 25,
-    CaptureTicksPois = 26,
-    CaptureEntities = 27,
+    FlushSave = 0,
+    HydrateSnapshot = 1,
+    RestoreDiskFiles = 2,
+    SaveDirStreaming = 3,
+    Prepare = 4,
+    PlayersOnline = 5,
+    OfflineFiles = 6,
+    WorldState = 7,
+    ServerGlobals = 8,
+    Scoreboard = 9,
+    Bosses = 10,
+    FutureMca = 11,
+    ChunkBlocks = 12,
+    ChunkBeClear = 13,
+    ChunkBeLoad = 14,
+    ChunkTicks = 15,
+    ChunkPois = 16,
+    ChunkPush = 17,
+    RemoveForeign = 18,
+    SpawnNbt = 19,
+    ApplyMobRam = 20,
+    BrainRelink = 21,
+    BrainDeepClone = 22,
+    RemoveSnapshotEntities = 23,
+    DropStaleEvents = 24,
+    MenuReopen = 25,
+    PacketsBroadcast = 26,
+    ClientSnapUpdate = 27,
+    CapturePlayers = 28,
+    CaptureGlobals = 29,
+    CaptureRaids = 30,
+    CaptureWorldState = 31,
+    CaptureChunks = 32,
+    CaptureBe = 33,
+    CaptureTicksPois = 34,
+    CaptureEntities = 35,
 }
 
-const PHASE_COUNT: usize = 28;
+const PHASE_COUNT: usize = 36;
 
 #[derive(Clone, Debug)]
 pub struct BenchmarkData {
@@ -968,11 +997,16 @@ pub fn bench_end_and_log() -> String {
 
         let top_level = if is_rollback {
             &[
-                Phase::Prepare, Phase::PlayersOnline, Phase::OfflineFiles, Phase::WorldState,
-                Phase::ServerGlobals, Phase::Scoreboard, Phase::ChunkBlocks, Phase::ChunkBeClear,
-                Phase::ChunkBeLoad, Phase::ChunkTicks, Phase::ChunkPois, Phase::ChunkPush,
-                Phase::RemoveForeign, Phase::SpawnNbt, Phase::BrainRelink, Phase::ApplyMobRam,
-                Phase::RemoveSnapshotEntities, Phase::DropStaleEvents, Phase::MenuReopen,
+                Phase::FlushSave, Phase::HydrateSnapshot, Phase::RestoreDiskFiles,
+                Phase::SaveDirStreaming, Phase::Prepare, Phase::PlayersOnline,
+                Phase::OfflineFiles, Phase::WorldState, Phase::ServerGlobals,
+                Phase::Scoreboard, Phase::Bosses, Phase::FutureMca,
+                Phase::ChunkBlocks, Phase::ChunkBeClear, Phase::ChunkBeLoad,
+                Phase::ChunkTicks, Phase::ChunkPois, Phase::ChunkPush,
+                Phase::RemoveForeign, Phase::SpawnNbt, Phase::BrainRelink,
+                Phase::ApplyMobRam, Phase::RemoveSnapshotEntities,
+                Phase::DropStaleEvents, Phase::MenuReopen, Phase::PacketsBroadcast,
+                Phase::ClientSnapUpdate,
             ][..]
         } else {
             &[
@@ -999,6 +1033,19 @@ pub fn bench_end_and_log() -> String {
         };
 
         if is_rollback {
+            let disk_init = sum_ms(&[Phase::FlushSave, Phase::HydrateSnapshot, Phase::RestoreDiskFiles, Phase::SaveDirStreaming]);
+            if disk_init > 0.0 {
+                out.push_str(&format!("\n|-- Disk & Snapshot Init: {:.2} ms", disk_init));
+                let fs_ms = get_ms(Phase::FlushSave);
+                if fs_ms > 0.0 { out.push_str(&format!("\n|   |-- Flush & Save Live: {:.2} ms", fs_ms)); }
+                let hyd_ms = get_ms(Phase::HydrateSnapshot);
+                if hyd_ms > 0.0 { out.push_str(&format!("\n|   |-- Hydrate Snapshot: {:.2} ms", hyd_ms)); }
+                let disk_ms = get_ms(Phase::RestoreDiskFiles);
+                if disk_ms > 0.0 { out.push_str(&format!("\n|   |-- Restore Disk Files: {:.2} ms", disk_ms)); }
+                let st_ms = get_ms(Phase::SaveDirStreaming);
+                if st_ms > 0.0 { out.push_str(&format!("\n|   |-- SaveDir & Streaming: {:.2} ms", st_ms)); }
+            }
+
             let prep = get_ms(Phase::Prepare);
             if prep > 0.0 {
                 out.push_str(&format!("\n|-- Prepare: {:.2} ms", prep));
@@ -1013,7 +1060,7 @@ pub fn bench_end_and_log() -> String {
                 }
             }
 
-            let world = sum_ms(&[Phase::WorldState, Phase::ServerGlobals, Phase::Scoreboard]);
+            let world = sum_ms(&[Phase::WorldState, Phase::ServerGlobals, Phase::Scoreboard, Phase::Bosses, Phase::FutureMca]);
             if world > 0.0 {
                 out.push_str(&format!("\n|-- World & Globals: {:.2} ms", world));
                 let ws = get_ms(Phase::WorldState);
@@ -1022,6 +1069,10 @@ pub fn bench_end_and_log() -> String {
                 if sg > 0.0 { out.push_str(&format!("\n|   |-- ServerGlobals: {:.2} ms", sg)); }
                 let sc = get_ms(Phase::Scoreboard);
                 if sc > 0.0 { out.push_str(&format!("\n|   |-- Scoreboard: {:.2} ms", sc)); }
+                let b_ms = get_ms(Phase::Bosses);
+                if b_ms > 0.0 { out.push_str(&format!("\n|   |-- Bosses & Sculk: {:.2} ms", b_ms)); }
+                let mca_ms = get_ms(Phase::FutureMca);
+                if mca_ms > 0.0 { out.push_str(&format!("\n|   |-- Clean Future MCA: {:.2} ms", mca_ms)); }
             }
 
             let chunk_sum = sum_ms(&[
@@ -1061,6 +1112,11 @@ pub fn bench_end_and_log() -> String {
                 let mr = get_ms(Phase::ApplyMobRam);
                 if mr > 0.0 { out.push_str(&format!("\n|   |-- ApplyMobRam: {:.2} ms", mr)); }
             }
+
+            let p_ms = get_ms(Phase::PacketsBroadcast);
+            if p_ms > 0.0 { out.push_str(&format!("\n|-- Broadcast Packets: {:.2} ms", p_ms)); }
+            let cs_ms = get_ms(Phase::ClientSnapUpdate);
+            if cs_ms > 0.0 { out.push_str(&format!("\n|-- Client Snap Update: {:.2} ms", cs_ms)); }
         } else {
             out.push_str(&format!("\n|-- Globals: {:.2} ms", get_ms(Phase::CaptureGlobals)));
             out.push_str(&format!("\n|-- Raids & Dragon: {:.2} ms", get_ms(Phase::CaptureRaids)));
@@ -2138,6 +2194,7 @@ pub fn apply_level_snapshot_in_place(
 }
 
 pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
+    let t_start = std::time::Instant::now();
     let _ = game.stop_remote_mining();
 
     let client_snap = match get_client_slot_snapshot_clone(slot) {
@@ -2176,8 +2233,9 @@ pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
                                     for sx in 0..16 {
                                         let idx = ((sy << 8) | (sz << 4) | sx) as usize;
                                         let want = disk_sec.get(idx);
-                                        if live_sec.get(idx) != want {
-                                            diffs.push((x_base + sx, y_base + sy, z_base + sz, want));
+                                        let current = live_sec.get(idx);
+                                        if current != want {
+                                            diffs.push((x_base + sx, y_base + sy, z_base + sz, current, want));
                                         }
                                     }
                                 }
@@ -2186,41 +2244,99 @@ pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
                     }
                 }
             }
-            for (x, y, z, want) in diffs {
+            let dirty_before = game.world.dirty_sections.len();
+            for &(x, y, z, _, want) in &diffs {
                 let _ = game.world.set(x, y, z, BlockStateId(want));
             }
+            let dirty_marked = game.world.dirty_sections.len().saturating_sub(dirty_before);
+            let elapsed_ms = (t_start.elapsed().as_nanos() as f64) / 1_000_000.0;
+
+            let mut report = format!(
+                "[RZero][Client-Spark] === CLIENT ROLLBACK [{slot}]: {elapsed_ms:.2} ms ===\n\
+                 |-- Source: Disk Fallback (RAM Cache MISS)\n\
+                 |-- Blocks Changed ({}):",
+                diffs.len()
+            );
+            for &(x, y, z, old_id, new_id) in diffs.iter().take(10) {
+                let old_name = game.res.facts().get(BlockStateId(old_id)).name.clone();
+                let new_name = game.res.facts().get(BlockStateId(new_id)).name.clone();
+                report.push_str(&format!("\n|   |-- [{x}, {y}, {z}]: {old_name} ({old_id}) -> {new_name} ({new_id})"));
+            }
+            if diffs.len() > 10 {
+                report.push_str(&format!("\n|   |-- ... and {} more", diffs.len() - 10));
+            }
+            report.push_str(&format!("\n|-- Dirty Sections Marked: {dirty_marked}"));
+            eprintln!("{report}");
+            log::info!("{report}");
+            append_to_rzero_log(&game.world_root, &report);
             return;
         }
     };
 
     if game.dim != client_snap.dim {
+        let elapsed_ms = (t_start.elapsed().as_nanos() as f64) / 1_000_000.0;
+        let report = format!(
+            "[RZero][Client-Spark] === CLIENT ROLLBACK [{slot}]: {elapsed_ms:.2} ms ===\n\
+             |-- Status: Dimension Mismatch (game: {}, snap: {})\n\
+             |-- Blocks Changed: 0",
+            game.dim.id(), client_snap.dim.id()
+        );
+        eprintln!("{report}");
+        log::info!("{report}");
+        append_to_rzero_log(&game.world_root, &report);
         return;
     }
 
     let old_chunks = game.world.chunks.clone();
+    let chunks_total = client_snap.chunks.len();
+    let mut chunks_skipped_ptr = 0usize;
+    let mut chunks_evaluated = 0usize;
+    let mut sections_total = 0usize;
+    let mut sections_skipped_ptr = 0usize;
+    let mut sections_skipped_uniform = 0usize;
+    let mut sections_skipped_eq = 0usize;
+    let mut sections_evaluated = 0usize;
     let mut changed_coords = Vec::new();
 
-    for (&(cx, cz), snap_chunk) in client_snap.chunks.iter() {
+    let (px, pz) = game
+        .player
+        .as_ref()
+        .map(|p| ((p.position.x as i32) >> 4, (p.position.z as i32) >> 4))
+        .unwrap_or((0, 0));
+
+    let mut chunk_keys: Vec<(i32, i32)> = client_snap.chunks.keys().copied().collect();
+    chunk_keys.sort_unstable_by_key(|&(cx, cz)| (cx - px).abs().max((cz - pz).abs()));
+
+    let t_scan = std::time::Instant::now();
+    for &(cx, cz) in &chunk_keys {
+        let snap_chunk = &client_snap.chunks[&(cx, cz)];
         if let Some(live_chunk) = old_chunks.get(&(cx, cz)) {
             if Arc::ptr_eq(live_chunk, snap_chunk) {
+                chunks_skipped_ptr += 1;
                 continue;
             }
+            chunks_evaluated += 1;
             let min_y = snap_chunk.min_y();
             for (s_idx, snap_sec) in snap_chunk.sections.iter().enumerate() {
+                sections_total += 1;
                 let Some(live_sec) = live_chunk.sections.get(s_idx) else {
                     continue;
                 };
                 if Arc::ptr_eq(live_sec, snap_sec) {
+                    sections_skipped_ptr += 1;
                     continue;
                 }
                 if let (Some(u1), Some(u2)) = (snap_sec.blocks.uniform(), live_sec.blocks.uniform()) {
                     if u1 == u2 {
+                        sections_skipped_uniform += 1;
                         continue;
                     }
                 }
                 if snap_sec.blocks == live_sec.blocks {
+                    sections_skipped_eq += 1;
                     continue;
                 }
+                sections_evaluated += 1;
 
                 let y_base = min_y + (s_idx as i32) * 16;
                 let x_base = cx * 16;
@@ -2230,11 +2346,13 @@ pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
                         for sx in 0..16 {
                             let idx = ((sy << 8) | (sz << 4) | sx) as usize;
                             let want = snap_sec.get(idx);
-                            if live_sec.get(idx) != want {
+                            let current = live_sec.get(idx);
+                            if current != want {
                                 changed_coords.push((
                                     x_base + sx,
                                     y_base + sy,
                                     z_base + sz,
+                                    current,
                                     want,
                                 ));
                             }
@@ -2244,10 +2362,45 @@ pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
             }
         }
     }
+    let scan_ms = (t_scan.elapsed().as_nanos() as f64) / 1_000_000.0;
 
-    for (wx, wy, wz, want) in changed_coords {
+    let t_set = std::time::Instant::now();
+    let dirty_before = game.world.dirty_sections.len();
+    for &(wx, wy, wz, _, want) in &changed_coords {
         let _ = game.world.set(wx, wy, wz, BlockStateId(want));
     }
+    let dirty_marked = game.world.dirty_sections.len().saturating_sub(dirty_before);
+    let set_ms = (t_set.elapsed().as_nanos() as f64) / 1_000_000.0;
+    let elapsed_ms = (t_start.elapsed().as_nanos() as f64) / 1_000_000.0;
+
+    sync_client_epoch();
+
+    let mut report = format!(
+        "[RZero][Client-Spark] === CLIENT ROLLBACK [{slot}]: {elapsed_ms:.2} ms ===\n\
+         |-- Phase 1 (Cache Lookup): {:.2} ms [RAM HIT | dim: {}]\n\
+         |-- Phase 2 (Chunks & Sections Scan): {scan_ms:.2} ms\n\
+         |   |-- Chunks: {chunks_total} total | {chunks_skipped_ptr} ptr_eq | {chunks_evaluated} eval (nearest-first)\n\
+         |   |-- Sections: {sections_total} in eval | {sections_skipped_ptr} ptr_eq | {sections_skipped_uniform} uniform | {sections_skipped_eq} content_eq | {sections_evaluated} eval\n\
+         |-- Phase 3 (Block World Sets): {set_ms:.2} ms (blocks changed: {})\n\
+         |-- Phase 4 (Mesher Invalidation): {dirty_marked} dirty sections marked",
+        (t_scan.duration_since(t_start).as_nanos() as f64) / 1_000_000.0,
+        game.dim.id(),
+        changed_coords.len()
+    );
+    if !changed_coords.is_empty() {
+        report.push_str("\n|-- Changed Blocks Detail:");
+        for &(x, y, z, old_id, new_id) in changed_coords.iter().take(10) {
+            let old_name = game.res.facts().get(BlockStateId(old_id)).name.clone();
+            let new_name = game.res.facts().get(BlockStateId(new_id)).name.clone();
+            report.push_str(&format!("\n|   |-- [{x}, {y}, {z}]: {old_name} ({old_id}) -> {new_name} ({new_id})"));
+        }
+        if changed_coords.len() > 10 {
+            report.push_str(&format!("\n|   |-- ... and {} more", changed_coords.len() - 10));
+        }
+    }
+    eprintln!("{report}");
+    log::info!("{report}");
+    append_to_rzero_log(&game.world_root, &report);
 }
 
 pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
@@ -2257,12 +2410,17 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 
 pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
     let t_start = std::time::Instant::now();
-    let t_globals = std::time::Instant::now();
+    bench_begin(&format!("ROLLBACK RESTORE [{}]", slot), game.world.game_time);
+
+    let t_flush = std::time::Instant::now();
     let _ = game.save.flush();
     for parked in game.levels.parked.values() {
         let _ = parked.save.flush();
     }
     game.world.loaded_entities.clear();
+    bench_accum(Phase::FlushSave, t_flush);
+
+    let t_hydrate = std::time::Instant::now();
     let mut snap = match get_slot_snapshot_clone(slot) {
         Some(s) => s,
         None => match hydrate_slot_from_disk_on_server(game, slot) {
@@ -2285,14 +2443,19 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             snap = hydrated;
         }
     }
+    bench_accum(Phase::HydrateSnapshot, t_hydrate);
 
     let need_force_disk = !snap.disk_restored;
     let is_hot_rollback = slot == "default"
         && game.dim == target_dim
         && snap.levels.contains_key(&game.dim)
         && !need_force_disk;
+    let t_disk = std::time::Instant::now();
     let disk_files_changed =
         restore_disk_files_for_slot_opts(&game.world_root, slot, need_force_disk);
+    bench_accum(Phase::RestoreDiskFiles, t_disk);
+
+    let t_savedir = std::time::Instant::now();
     if need_force_disk || !is_hot_rollback || disk_files_changed > 0 {
         let new_save = horizon_client::save::SaveDir::new(
             game.save.root.clone(),
@@ -2306,11 +2469,12 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         }
         game.save = Arc::new(new_save);
     }
+    bench_accum(Phase::SaveDirStreaming, t_savedir);
 
-    bench_begin(&format!("ROLLBACK RESTORE [{}]", slot), game.world.game_time);
     bench_add_players(snap.guests.len());
     let policy = &snap.policy;
 
+    let t_globals = std::time::Instant::now();
     if policy.world_time {
         game.world.game_time = snap.game_time;
         game.world.day_time = snap.day_time;
@@ -2342,13 +2506,16 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     if policy.server_world_border {
         game.border = snap.border.clone();
     }
+    if policy.world_scoreboard {
+        game.score.board = snap.scoreboard.clone();
+    }
+    bench_accum(Phase::ServerGlobals, t_globals);
+
+    let t_bosses = std::time::Instant::now();
     if policy.server_bossbars {
         let bars = BossBars::unpack(&snap.bossbars);
         game.bosses = Default::default();
         game.bosses.bars = bars;
-    }
-    if policy.world_scoreboard {
-        game.score.board = snap.scoreboard.clone();
     }
     if policy.world_dragon_fight {
         let fight_path = fight_dat_path(&game.world_root);
@@ -2384,7 +2551,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         }
     }
     game.creatures.reset_trader();
+    bench_accum(Phase::Bosses, t_bosses);
 
+    let t_mca = std::time::Instant::now();
     let subfolders = ["region", "entities", "poi"];
     let dims = [
         "dimensions/minecraft/overworld",
@@ -2406,6 +2575,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             }
         }
     }
+    bench_accum(Phase::FutureMca, t_mca);
 
     if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || !is_hot_rollback {
         restore_offline_files(&snap.offline_player_data, policy.player_stats);
@@ -2867,10 +3037,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         });
     });
 
-    let bench_report = bench_end_and_log();
-    log::info!("{}", bench_report);
-    append_to_rzero_log(&game.world_root, &bench_report);
-
+    let t_cs = std::time::Instant::now();
     if need_force_disk || !snap.levels.contains_key(&target_dim) {
         let mut updated = (*snap).clone();
         updated.disk_restored = true;
@@ -2888,6 +3055,11 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     };
     set_client_slot_snapshot(slot, client_snap);
     bump_rollback_epoch();
+    bench_accum(Phase::ClientSnapUpdate, t_cs);
+
+    let bench_report = bench_end_and_log();
+    log::info!("{}", bench_report);
+    append_to_rzero_log(&game.world_root, &bench_report);
 
     if let Ok(mut tr) = loop_tracker().write() {
         tr.on_rollback(snap.game_time);
@@ -4977,21 +5149,7 @@ pub fn handle_tick(game: &mut Game<'_>) {
     }
 
     if game.remote.is_some() {
-        let current_epoch = get_rollback_epoch();
-        std::thread_local! {
-            static CLIENT_LAST_EPOCH: RefCell<u64> = const { RefCell::new(0) };
-        }
-        let needs_client_rollback = CLIENT_LAST_EPOCH.with(|cell| {
-            let mut last = cell.borrow_mut();
-            if *last != current_epoch {
-                *last = current_epoch;
-                true
-            } else {
-                false
-            }
-        });
-
-        if needs_client_rollback && current_epoch > 0 {
+        if client_epoch_needs_sync() && get_rollback_epoch() > 0 {
             let slot = with_state(|st| st.current_slot.clone());
             apply_client_level_rollback(game, &slot);
         }

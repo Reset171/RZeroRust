@@ -336,6 +336,27 @@ pub fn get_rollback_epoch() -> u64 {
     ROLLBACK_EPOCH.load(Ordering::SeqCst)
 }
 
+std::thread_local! {
+    static CLIENT_LAST_EPOCH: RefCell<u64> = const { RefCell::new(0) };
+}
+
+pub fn sync_client_epoch() {
+    CLIENT_LAST_EPOCH.with(|cell| *cell.borrow_mut() = get_rollback_epoch());
+}
+
+pub fn client_epoch_needs_sync() -> bool {
+    let current_epoch = get_rollback_epoch();
+    CLIENT_LAST_EPOCH.with(|cell| {
+        let mut last = cell.borrow_mut();
+        if *last != current_epoch {
+            *last = current_epoch;
+            true
+        } else {
+            false
+        }
+    })
+}
+
 pub fn clear_client_snapshots() {
     set_client_snapshot(None);
     if let Ok(mut lock) = client_slots_lock().write() {

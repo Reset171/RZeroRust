@@ -159,21 +159,7 @@ pub fn handle_tick(game: &mut Game<'_>) {
     }
 
     if game.remote.is_some() {
-        let current_epoch = get_rollback_epoch();
-        std::thread_local! {
-            static CLIENT_LAST_EPOCH: RefCell<u64> = const { RefCell::new(0) };
-        }
-        let needs_client_rollback = CLIENT_LAST_EPOCH.with(|cell| {
-            let mut last = cell.borrow_mut();
-            if *last != current_epoch {
-                *last = current_epoch;
-                true
-            } else {
-                false
-            }
-        });
-
-        if needs_client_rollback && current_epoch > 0 {
+        if client_epoch_needs_sync() && get_rollback_epoch() > 0 {
             let slot = with_state(|st| st.current_slot.clone());
             apply_client_level_rollback(game, &slot);
         }

@@ -5,37 +5,45 @@ use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
-    Prepare = 0,
-    PlayersOnline = 1,
-    OfflineFiles = 2,
-    WorldState = 3,
-    ServerGlobals = 4,
-    Scoreboard = 5,
-    ChunkBlocks = 6,
-    ChunkBeClear = 7,
-    ChunkBeLoad = 8,
-    ChunkTicks = 9,
-    ChunkPois = 10,
-    ChunkPush = 11,
-    RemoveForeign = 12,
-    SpawnNbt = 13,
-    ApplyMobRam = 14,
-    BrainRelink = 15,
-    BrainDeepClone = 16,
-    RemoveSnapshotEntities = 17,
-    DropStaleEvents = 18,
-    MenuReopen = 19,
-    CapturePlayers = 20,
-    CaptureGlobals = 21,
-    CaptureRaids = 22,
-    CaptureWorldState = 23,
-    CaptureChunks = 24,
-    CaptureBe = 25,
-    CaptureTicksPois = 26,
-    CaptureEntities = 27,
+    FlushSave = 0,
+    HydrateSnapshot = 1,
+    RestoreDiskFiles = 2,
+    SaveDirStreaming = 3,
+    Prepare = 4,
+    PlayersOnline = 5,
+    OfflineFiles = 6,
+    WorldState = 7,
+    ServerGlobals = 8,
+    Scoreboard = 9,
+    Bosses = 10,
+    FutureMca = 11,
+    ChunkBlocks = 12,
+    ChunkBeClear = 13,
+    ChunkBeLoad = 14,
+    ChunkTicks = 15,
+    ChunkPois = 16,
+    ChunkPush = 17,
+    RemoveForeign = 18,
+    SpawnNbt = 19,
+    ApplyMobRam = 20,
+    BrainRelink = 21,
+    BrainDeepClone = 22,
+    RemoveSnapshotEntities = 23,
+    DropStaleEvents = 24,
+    MenuReopen = 25,
+    PacketsBroadcast = 26,
+    ClientSnapUpdate = 27,
+    CapturePlayers = 28,
+    CaptureGlobals = 29,
+    CaptureRaids = 30,
+    CaptureWorldState = 31,
+    CaptureChunks = 32,
+    CaptureBe = 33,
+    CaptureTicksPois = 34,
+    CaptureEntities = 35,
 }
 
-const PHASE_COUNT: usize = 28;
+const PHASE_COUNT: usize = 36;
 
 #[derive(Clone, Debug)]
 pub struct BenchmarkData {
@@ -156,11 +164,16 @@ pub fn bench_end_and_log() -> String {
 
         let top_level = if is_rollback {
             &[
-                Phase::Prepare, Phase::PlayersOnline, Phase::OfflineFiles, Phase::WorldState,
-                Phase::ServerGlobals, Phase::Scoreboard, Phase::ChunkBlocks, Phase::ChunkBeClear,
-                Phase::ChunkBeLoad, Phase::ChunkTicks, Phase::ChunkPois, Phase::ChunkPush,
-                Phase::RemoveForeign, Phase::SpawnNbt, Phase::BrainRelink, Phase::ApplyMobRam,
-                Phase::RemoveSnapshotEntities, Phase::DropStaleEvents, Phase::MenuReopen,
+                Phase::FlushSave, Phase::HydrateSnapshot, Phase::RestoreDiskFiles,
+                Phase::SaveDirStreaming, Phase::Prepare, Phase::PlayersOnline,
+                Phase::OfflineFiles, Phase::WorldState, Phase::ServerGlobals,
+                Phase::Scoreboard, Phase::Bosses, Phase::FutureMca,
+                Phase::ChunkBlocks, Phase::ChunkBeClear, Phase::ChunkBeLoad,
+                Phase::ChunkTicks, Phase::ChunkPois, Phase::ChunkPush,
+                Phase::RemoveForeign, Phase::SpawnNbt, Phase::BrainRelink,
+                Phase::ApplyMobRam, Phase::RemoveSnapshotEntities,
+                Phase::DropStaleEvents, Phase::MenuReopen, Phase::PacketsBroadcast,
+                Phase::ClientSnapUpdate,
             ][..]
         } else {
             &[
@@ -187,6 +200,19 @@ pub fn bench_end_and_log() -> String {
         };
 
         if is_rollback {
+            let disk_init = sum_ms(&[Phase::FlushSave, Phase::HydrateSnapshot, Phase::RestoreDiskFiles, Phase::SaveDirStreaming]);
+            if disk_init > 0.0 {
+                out.push_str(&format!("\n|-- Disk & Snapshot Init: {:.2} ms", disk_init));
+                let fs_ms = get_ms(Phase::FlushSave);
+                if fs_ms > 0.0 { out.push_str(&format!("\n|   |-- Flush & Save Live: {:.2} ms", fs_ms)); }
+                let hyd_ms = get_ms(Phase::HydrateSnapshot);
+                if hyd_ms > 0.0 { out.push_str(&format!("\n|   |-- Hydrate Snapshot: {:.2} ms", hyd_ms)); }
+                let disk_ms = get_ms(Phase::RestoreDiskFiles);
+                if disk_ms > 0.0 { out.push_str(&format!("\n|   |-- Restore Disk Files: {:.2} ms", disk_ms)); }
+                let st_ms = get_ms(Phase::SaveDirStreaming);
+                if st_ms > 0.0 { out.push_str(&format!("\n|   |-- SaveDir & Streaming: {:.2} ms", st_ms)); }
+            }
+
             let prep = get_ms(Phase::Prepare);
             if prep > 0.0 {
                 out.push_str(&format!("\n|-- Prepare: {:.2} ms", prep));
@@ -201,7 +227,7 @@ pub fn bench_end_and_log() -> String {
                 }
             }
 
-            let world = sum_ms(&[Phase::WorldState, Phase::ServerGlobals, Phase::Scoreboard]);
+            let world = sum_ms(&[Phase::WorldState, Phase::ServerGlobals, Phase::Scoreboard, Phase::Bosses, Phase::FutureMca]);
             if world > 0.0 {
                 out.push_str(&format!("\n|-- World & Globals: {:.2} ms", world));
                 let ws = get_ms(Phase::WorldState);
@@ -210,6 +236,10 @@ pub fn bench_end_and_log() -> String {
                 if sg > 0.0 { out.push_str(&format!("\n|   |-- ServerGlobals: {:.2} ms", sg)); }
                 let sc = get_ms(Phase::Scoreboard);
                 if sc > 0.0 { out.push_str(&format!("\n|   |-- Scoreboard: {:.2} ms", sc)); }
+                let b_ms = get_ms(Phase::Bosses);
+                if b_ms > 0.0 { out.push_str(&format!("\n|   |-- Bosses & Sculk: {:.2} ms", b_ms)); }
+                let mca_ms = get_ms(Phase::FutureMca);
+                if mca_ms > 0.0 { out.push_str(&format!("\n|   |-- Clean Future MCA: {:.2} ms", mca_ms)); }
             }
 
             let chunk_sum = sum_ms(&[
@@ -249,6 +279,11 @@ pub fn bench_end_and_log() -> String {
                 let mr = get_ms(Phase::ApplyMobRam);
                 if mr > 0.0 { out.push_str(&format!("\n|   |-- ApplyMobRam: {:.2} ms", mr)); }
             }
+
+            let p_ms = get_ms(Phase::PacketsBroadcast);
+            if p_ms > 0.0 { out.push_str(&format!("\n|-- Broadcast Packets: {:.2} ms", p_ms)); }
+            let cs_ms = get_ms(Phase::ClientSnapUpdate);
+            if cs_ms > 0.0 { out.push_str(&format!("\n|-- Client Snap Update: {:.2} ms", cs_ms)); }
         } else {
             out.push_str(&format!("\n|-- Globals: {:.2} ms", get_ms(Phase::CaptureGlobals)));
             out.push_str(&format!("\n|-- Raids & Dragon: {:.2} ms", get_ms(Phase::CaptureRaids)));
