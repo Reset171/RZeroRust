@@ -1667,6 +1667,10 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
 }
 
 pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>, slot: &str) {
+    let now = game.world.game_time;
+    bench_begin(&format!("CHECKPOINT CAPTURE [{}]", slot), now);
+
+    let t_raids = std::time::Instant::now();
     let _ = game.save_game_with(true);
     let _ = game.save_entities(true);
     let _ = game.save.flush();
@@ -1676,7 +1680,9 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     game.save_raids();
     game.save_fight();
     game.save_wandering_trader();
+    bench_accum(Phase::CaptureRaids, t_raids);
 
+    let t_players = std::time::Instant::now();
     let mut guests = HashMap::new();
     let mut online = Vec::new();
     if let Some(host) = &game.lan {
@@ -1786,6 +1792,10 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         }
     }
 
+    bench_add_players(online.len());
+    bench_accum(Phase::CapturePlayers, t_players);
+
+    let t_chunks = std::time::Instant::now();
     let mut levels = HashMap::new();
     levels.insert(game.dim, capture_level_snapshot(game, game.dim));
     for (&dim, parked) in &game.levels.parked {
@@ -1794,10 +1804,13 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
             capture_parked_snapshot(&game.world_root, dim, parked),
         );
     }
+    let total_chunks: usize = levels.values().map(|l| l.chunks.len()).sum();
+    let total_mobs: usize = levels.values().map(|l| l.mobs.len()).sum();
+    bench_add_chunks(total_chunks);
+    bench_add_mobs(total_mobs);
+    bench_accum(Phase::CaptureChunks, t_chunks);
 
-    let now = game.world.game_time;
-    bench_begin(&format!("CHECKPOINT CAPTURE [{}]", slot), now);
-    bench_add_players(online.len());
+    let t_globals = std::time::Instant::now();
     let (anchor_set, policy) = with_state_mut(|st| {
         let anchors: HashSet<u128> = resolve_anchors(&st.anchor, &online, now, requester)
             .into_iter()
@@ -1868,6 +1881,9 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         disk_restored: true,
     });
 
+    bench_accum(Phase::CaptureGlobals, t_globals);
+
+    let t_world_state = std::time::Instant::now();
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
 
@@ -1880,6 +1896,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     if let Ok(mut tr) = loop_tracker().write() {
         tr.on_checkpoint(game.world.game_time);
     }
+    bench_accum(Phase::CaptureWorldState, t_world_state);
 
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
@@ -2251,6 +2268,8 @@ pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
             let dirty_marked = game.world.dirty_sections.len().saturating_sub(dirty_before);
             let elapsed_ms = (t_start.elapsed().as_nanos() as f64) / 1_000_000.0;
 
+            sync_client_epoch();
+
             let mut report = format!(
                 "[RZero][Client-Spark] === CLIENT ROLLBACK [{slot}]: {elapsed_ms:.2} ms ===\n\
                  |-- Source: Disk Fallback (RAM Cache MISS)\n\
@@ -2510,6 +2529,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.score.board = snap.scoreboard.clone();
     }
     bench_accum(Phase::ServerGlobals, t_globals);
+    let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;
 
     let t_bosses = std::time::Instant::now();
     if policy.server_bossbars {
@@ -2578,6 +2598,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     bench_accum(Phase::FutureMca, t_mca);
 
     if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || !is_hot_rollback {
+        let t_stream = std::time::Instant::now();
         restore_offline_files(&snap.offline_player_data, policy.player_stats);
         game.streaming.wait(std::time::Duration::from_millis(2));
         if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
@@ -2600,10 +2621,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             game.streaming = fresh_streaming;
             game.save = fresh_save;
         }
+        bench_accum(Phase::SaveDirStreaming, t_stream);
     }
 
-    bench_accum(Phase::ServerGlobals, t_globals);
-    let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;
     if game.dim != target_dim {
         let _ = game.enter_level(None, target_dim);
     }
@@ -3167,7 +3187,17 @@ pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot)
     // 1. Копируем level.dat
     let level_dat = world_root.join("level.dat");
     if level_dat.is_file() {
-        let _ = fs::copy(&level_dat, cp_dir.join("level.dat"));
+        let target_level = cp_dir.join("level.dat");
+        if fs::copy(&level_dat, &target_level).is_ok() {
+            if let (Ok(m), Ok(f)) = (
+                level_dat.metadata(),
+                fs::File::options().write(true).open(&target_level),
+            ) {
+                if let Ok(mtime) = m.modified() {
+                    let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
+                }
+            }
+        }
     }
 
     // 2. Копируем папку players
@@ -3283,9 +3313,29 @@ pub fn restore_disk_files_for_slot_opts(world_root: &Path, slot: &str, force: bo
     let cp_dir = slot_dir(world_root, slot);
     let mut changed = 0;
     let cp_level = cp_dir.join("level.dat");
+    let target_level = world_root.join("level.dat");
     if cp_level.is_file() {
-        if fs::copy(&cp_level, world_root.join("level.dat")).is_ok() {
-            changed += 1;
+        let mut skip = false;
+        if !force {
+            if let (Ok(m_src), Ok(m_dst)) = (cp_level.metadata(), target_level.metadata()) {
+                if m_src.len() == m_dst.len() {
+                    if let (Ok(t_src), Ok(t_dst)) = (m_src.modified(), m_dst.modified()) {
+                        if t_src == t_dst {
+                            skip = true;
+                        }
+                    }
+                }
+            }
+        }
+        if !skip && fs::copy(&cp_level, &target_level).is_ok() {
+            if let (Ok(m), Ok(f)) = (
+                cp_level.metadata(),
+                fs::File::options().write(true).open(&target_level),
+            ) {
+                if let Ok(mtime) = m.modified() {
+                    let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
+                }
+            }
         }
     }
     let cp_players = cp_dir.join("players");

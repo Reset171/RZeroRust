@@ -111,7 +111,17 @@ pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot)
     // 1. Копируем level.dat
     let level_dat = world_root.join("level.dat");
     if level_dat.is_file() {
-        let _ = fs::copy(&level_dat, cp_dir.join("level.dat"));
+        let target_level = cp_dir.join("level.dat");
+        if fs::copy(&level_dat, &target_level).is_ok() {
+            if let (Ok(m), Ok(f)) = (
+                level_dat.metadata(),
+                fs::File::options().write(true).open(&target_level),
+            ) {
+                if let Ok(mtime) = m.modified() {
+                    let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
+                }
+            }
+        }
     }
 
     // 2. Копируем папку players
@@ -227,9 +237,29 @@ pub fn restore_disk_files_for_slot_opts(world_root: &Path, slot: &str, force: bo
     let cp_dir = slot_dir(world_root, slot);
     let mut changed = 0;
     let cp_level = cp_dir.join("level.dat");
+    let target_level = world_root.join("level.dat");
     if cp_level.is_file() {
-        if fs::copy(&cp_level, world_root.join("level.dat")).is_ok() {
-            changed += 1;
+        let mut skip = false;
+        if !force {
+            if let (Ok(m_src), Ok(m_dst)) = (cp_level.metadata(), target_level.metadata()) {
+                if m_src.len() == m_dst.len() {
+                    if let (Ok(t_src), Ok(t_dst)) = (m_src.modified(), m_dst.modified()) {
+                        if t_src == t_dst {
+                            skip = true;
+                        }
+                    }
+                }
+            }
+        }
+        if !skip && fs::copy(&cp_level, &target_level).is_ok() {
+            if let (Ok(m), Ok(f)) = (
+                cp_level.metadata(),
+                fs::File::options().write(true).open(&target_level),
+            ) {
+                if let Ok(mtime) = m.modified() {
+                    let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
+                }
+            }
         }
     }
     let cp_players = cp_dir.join("players");

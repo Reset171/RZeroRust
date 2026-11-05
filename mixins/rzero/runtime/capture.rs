@@ -149,6 +149,10 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
 }
 
 pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>, slot: &str) {
+    let now = game.world.game_time;
+    bench_begin(&format!("CHECKPOINT CAPTURE [{}]", slot), now);
+
+    let t_raids = std::time::Instant::now();
     let _ = game.save_game_with(true);
     let _ = game.save_entities(true);
     let _ = game.save.flush();
@@ -158,7 +162,9 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     game.save_raids();
     game.save_fight();
     game.save_wandering_trader();
+    bench_accum(Phase::CaptureRaids, t_raids);
 
+    let t_players = std::time::Instant::now();
     let mut guests = HashMap::new();
     let mut online = Vec::new();
     if let Some(host) = &game.lan {
@@ -268,6 +274,10 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         }
     }
 
+    bench_add_players(online.len());
+    bench_accum(Phase::CapturePlayers, t_players);
+
+    let t_chunks = std::time::Instant::now();
     let mut levels = HashMap::new();
     levels.insert(game.dim, capture_level_snapshot(game, game.dim));
     for (&dim, parked) in &game.levels.parked {
@@ -276,10 +286,13 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
             capture_parked_snapshot(&game.world_root, dim, parked),
         );
     }
+    let total_chunks: usize = levels.values().map(|l| l.chunks.len()).sum();
+    let total_mobs: usize = levels.values().map(|l| l.mobs.len()).sum();
+    bench_add_chunks(total_chunks);
+    bench_add_mobs(total_mobs);
+    bench_accum(Phase::CaptureChunks, t_chunks);
 
-    let now = game.world.game_time;
-    bench_begin(&format!("CHECKPOINT CAPTURE [{}]", slot), now);
-    bench_add_players(online.len());
+    let t_globals = std::time::Instant::now();
     let (anchor_set, policy) = with_state_mut(|st| {
         let anchors: HashSet<u128> = resolve_anchors(&st.anchor, &online, now, requester)
             .into_iter()
@@ -350,6 +363,9 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         disk_restored: true,
     });
 
+    bench_accum(Phase::CaptureGlobals, t_globals);
+
+    let t_world_state = std::time::Instant::now();
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
 
@@ -362,6 +378,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     if let Ok(mut tr) = loop_tracker().write() {
         tr.on_checkpoint(game.world.game_time);
     }
+    bench_accum(Phase::CaptureWorldState, t_world_state);
 
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);

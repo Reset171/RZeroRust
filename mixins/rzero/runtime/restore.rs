@@ -389,6 +389,8 @@ pub fn apply_client_level_rollback(game: &mut Game<'_>, slot: &str) {
             let dirty_marked = game.world.dirty_sections.len().saturating_sub(dirty_before);
             let elapsed_ms = (t_start.elapsed().as_nanos() as f64) / 1_000_000.0;
 
+            sync_client_epoch();
+
             let mut report = format!(
                 "[RZero][Client-Spark] === CLIENT ROLLBACK [{slot}]: {elapsed_ms:.2} ms ===\n\
                  |-- Source: Disk Fallback (RAM Cache MISS)\n\
@@ -648,6 +650,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
         game.score.board = snap.scoreboard.clone();
     }
     bench_accum(Phase::ServerGlobals, t_globals);
+    let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;
 
     let t_bosses = std::time::Instant::now();
     if policy.server_bossbars {
@@ -716,6 +719,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     bench_accum(Phase::FutureMca, t_mca);
 
     if target_dim != game.dim || deleted_region_files || disk_files_changed > 0 || !is_hot_rollback {
+        let t_stream = std::time::Instant::now();
         restore_offline_files(&snap.offline_player_data, policy.player_stats);
         game.streaming.wait(std::time::Duration::from_millis(2));
         if let Ok((fresh_streaming, fresh_save, _)) = super::super::world_loading::make_streaming(
@@ -738,10 +742,9 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             game.streaming = fresh_streaming;
             game.save = fresh_save;
         }
+        bench_accum(Phase::SaveDirStreaming, t_stream);
     }
 
-    bench_accum(Phase::ServerGlobals, t_globals);
-    let globals_ms = (std::time::Instant::now() - t_globals).as_secs_f64() * 1000.0;
     if game.dim != target_dim {
         let _ = game.enter_level(None, target_dim);
     }

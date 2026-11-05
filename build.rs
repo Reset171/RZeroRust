@@ -3,6 +3,21 @@ use std::path::Path;
 
 fn main() {
     println!("cargo:rerun-if-changed=mixins/rzero/runtime");
+    for file_name in [
+        "types.rs",
+        "snapshots.rs",
+        "benchmark.rs",
+        "adaptive.rs",
+        "capture.rs",
+        "restore.rs",
+        "persistence.rs",
+        "commands.rs",
+        "ui.rs",
+        "tracker.rs",
+        "hooks.rs",
+    ] {
+        println!("cargo:rerun-if-changed=mixins/rzero/runtime/{file_name}");
+    }
     assemble_runtime();
 }
 
