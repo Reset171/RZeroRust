@@ -229,6 +229,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
                     sleep_timer: g.sleep_timer,
                     vehicle: g.vehicle,
                     vehicle_good: g.vehicle_good,
+                    boarding_cooldown: g.boarding_cooldown,
                     spawn: g.spawn,
                     respawn_elsewhere: g.respawn_elsewhere.clone(),
                     last_death: g.last_death.clone(),

@@ -139,6 +139,7 @@ pub fn apply_level_snapshot_in_place(
         bench_add_blocks_changed(changed_coords.len());
 
         if policy.blocks {
+            game.world.block_log_held.clear();
             for (wx, wy, wz, want) in changed_coords {
                 let _ = game.world.set(wx, wy, wz, BlockStateId(want));
             }
@@ -783,6 +784,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                 let prev_vehicle = g.vehicle;
                 g.vehicle = gs.vehicle;
                 g.vehicle_good = gs.vehicle_good;
+                g.boarding_cooldown = gs.boarding_cooldown;
                 if prev_vehicle != gs.vehicle {
                     if let Some(old_v) = prev_vehicle {
                         g.send(&C::SetPassengers(play::SetPassengers {
@@ -962,6 +964,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                             dim: target_dim,
                             at: gs.position,
                             rotation: Some([gs.yaw, gs.pitch]),
+                            vehicle: None,
                         });
                 } else {
                     host.hub.teleport(gi, Some(gs.position));

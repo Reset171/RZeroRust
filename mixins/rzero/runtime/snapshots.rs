@@ -47,6 +47,7 @@ use std::{
 pub struct FallingSnapshot {
     pub join: horizon_client::join_seq::JoinSeq,
     pub id: u32,
+    pub rotation: [f32; 2],
     pub state: BlockStateId,
     pub start_pos: BlockPos,
     pub position: Vec3,
@@ -67,6 +68,7 @@ impl FallingSnapshot {
         Self {
             join: f.join,
             id: f.id,
+            rotation: f.rotation,
             state: f.state,
             start_pos: f.start_pos,
             position: f.position,
@@ -85,6 +87,7 @@ impl FallingSnapshot {
 
     pub fn to_live(&self) -> FallingBlock {
         FallingBlock {
+            rotation: self.rotation,
             join: self.join,
             id: self.id,
             state: self.state,
@@ -163,6 +166,7 @@ pub struct GuestSnapshot {
     pub sleep_timer: u32,
     pub vehicle: Option<u32>,
     pub vehicle_good: Option<[f64; 3]>,
+    pub boarding_cooldown: i32,
     pub spawn: Option<[f64; 3]>,
     pub respawn_elsewhere: Option<(String, [i32; 3], f32, bool)>,
     pub last_death: Option<(String, [i32; 3])>,

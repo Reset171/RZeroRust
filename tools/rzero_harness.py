@@ -160,7 +160,15 @@ class RZeroHarness:
             try:
                 return json.loads(text)
             except Exception:
-                return text
+                pass
+            start = text.find("{")
+            if start != -1:
+                try:
+                    val, _ = json.JSONDecoder().raw_decode(text[start:])
+                    return val
+                except Exception:
+                    pass
+            return text
         return res
 
     def state(self):

@@ -461,6 +461,7 @@ pub fn resolve_anchors(
 pub struct FallingSnapshot {
     pub join: horizon_client::join_seq::JoinSeq,
     pub id: u32,
+    pub rotation: [f32; 2],
     pub state: BlockStateId,
     pub start_pos: BlockPos,
     pub position: Vec3,
@@ -481,6 +482,7 @@ impl FallingSnapshot {
         Self {
             join: f.join,
             id: f.id,
+            rotation: f.rotation,
             state: f.state,
             start_pos: f.start_pos,
             position: f.position,
@@ -499,6 +501,7 @@ impl FallingSnapshot {
 
     pub fn to_live(&self) -> FallingBlock {
         FallingBlock {
+            rotation: self.rotation,
             join: self.join,
             id: self.id,
             state: self.state,
@@ -577,6 +580,7 @@ pub struct GuestSnapshot {
     pub sleep_timer: u32,
     pub vehicle: Option<u32>,
     pub vehicle_good: Option<[f64; 3]>,
+    pub boarding_cooldown: i32,
     pub spawn: Option<[f64; 3]>,
     pub respawn_elsewhere: Option<(String, [i32; 3], f32, bool)>,
     pub last_death: Option<(String, [i32; 3])>,
@@ -1687,6 +1691,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
                     sleep_timer: g.sleep_timer,
                     vehicle: g.vehicle,
                     vehicle_good: g.vehicle_good,
+                    boarding_cooldown: g.boarding_cooldown,
                     spawn: g.spawn,
                     respawn_elsewhere: g.respawn_elsewhere.clone(),
                     last_death: g.last_death.clone(),
@@ -1940,6 +1945,7 @@ pub fn apply_level_snapshot_in_place(
         bench_add_blocks_changed(changed_coords.len());
 
         if policy.blocks {
+            game.world.block_log_held.clear();
             for (wx, wy, wz, want) in changed_coords {
                 let _ = game.world.set(wx, wy, wz, BlockStateId(want));
             }
@@ -2584,6 +2590,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                 let prev_vehicle = g.vehicle;
                 g.vehicle = gs.vehicle;
                 g.vehicle_good = gs.vehicle_good;
+                g.boarding_cooldown = gs.boarding_cooldown;
                 if prev_vehicle != gs.vehicle {
                     if let Some(old_v) = prev_vehicle {
                         g.send(&C::SetPassengers(play::SetPassengers {
@@ -2763,6 +2770,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
                             dim: target_dim,
                             at: gs.position,
                             rotation: Some([gs.yaw, gs.pitch]),
+                            vehicle: None,
                         });
                 } else {
                     host.hub.teleport(gi, Some(gs.position));
@@ -3022,6 +3030,7 @@ pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot)
             "sprinting": g.sprinting,
             "sneaking": g.sneaking,
             "fall_flying": g.fall_flying,
+            "boarding_cooldown": g.boarding_cooldown,
             "health": g.health,
             "absorption": g.absorption,
             "food": g.food,
@@ -3244,6 +3253,7 @@ pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnap
                 sleep_timer: 0,
                 vehicle: None,
                 vehicle_good: None,
+                boarding_cooldown: g_val["boarding_cooldown"].as_i64().unwrap_or(0) as i32,
                 spawn: None,
                 respawn_elsewhere: None,
                 last_death: None,
