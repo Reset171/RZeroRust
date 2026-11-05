@@ -273,6 +273,7 @@ pub struct TimelineSnapshot {
     pub offline_player_data: HashMap<PathBuf, Vec<u8>>,
     pub levels: HashMap<Dim, LevelSnapshot>,
     pub mob_players: FxHashMap<u32, u32>,
+    pub disk_restored: bool,
 }
 
 #[derive(Clone)]
@@ -353,6 +354,11 @@ pub fn set_snapshot(snap: Option<Arc<TimelineSnapshot>>) {
 
 pub fn clear_snapshot() {
     SNAPSHOT.with(|cell| *cell.borrow_mut() = None);
+}
+
+pub fn clear_all_slots() {
+    clear_snapshot();
+    SLOTS.with(|cell| cell.borrow_mut().clear());
 }
 
 pub fn get_slot_snapshot_clone(slot: &str) -> Option<Arc<TimelineSnapshot>> {

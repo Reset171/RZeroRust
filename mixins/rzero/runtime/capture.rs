@@ -149,7 +149,12 @@ pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>)
 }
 
 pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>, slot: &str) {
+    let _ = game.save_game_with(true);
+    let _ = game.save_entities(true);
     let _ = game.save.flush();
+    for parked in game.levels.parked.values() {
+        let _ = parked.save.flush();
+    }
     game.save_raids();
     game.save_fight();
     game.save_wandering_trader();
@@ -341,9 +346,9 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
         offline_player_data,
         levels,
         mob_players: game.lan.as_ref().map(|h| h.mob_players.clone()).unwrap_or_default(),
+        disk_restored: true,
     });
 
-    let _ = game.save_game_with(true);
     save_slot_to_disk(&game.world_root, slot, &timeline);
     set_slot_snapshot(slot, timeline);
 

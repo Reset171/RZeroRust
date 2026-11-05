@@ -2,8 +2,8 @@ use super::super::{
     Dim, Game,
 };
 use super::persistence::{
-    load_checkpoint_from_disk, load_slot_from_disk, restore_disk_files_for_slot,
-    restore_disk_files_on_rollback,
+    hydrate_slot_from_disk_on_server, load_checkpoint_from_disk, load_slot_from_disk,
+    restore_disk_files_for_slot, restore_disk_files_for_slot_opts, restore_disk_files_on_rollback,
 };
 use super::snapshots::*;
 use super::types::*;
@@ -98,6 +98,43 @@ pub fn apply_level_snapshot_in_place(
                 }
             }
         }
+        for (&(cx, cz), live_chunk) in old_chunks.iter() {
+            if !snap.chunks.contains_key(&(cx, cz)) {
+                if let Some(disk_chunk) =
+                    game.save.load(cx, cz, game.pack.assets.registry, game.res.biomes())
+                {
+                    let min_y = disk_chunk.min_y();
+                    for (s_idx, disk_sec) in disk_chunk.sections.iter().enumerate() {
+                        let Some(live_sec) = live_chunk.sections.get(s_idx) else {
+                            continue;
+                        };
+                        if disk_sec.blocks == live_sec.blocks {
+                            continue;
+                        }
+                        let y_base = min_y + (s_idx as i32) * 16;
+                        let x_base = cx * 16;
+                        let z_base = cz * 16;
+                        for sy in 0..16 {
+                            for sz in 0..16 {
+                                for sx in 0..16 {
+                                    let idx = ((sy << 8) | (sz << 4) | sx) as usize;
+                                    let want = disk_sec.get(idx);
+                                    if live_sec.get(idx) != want {
+                                        changed_coords.push((
+                                            x_base + sx,
+                                            y_base + sy,
+                                            z_base + sz,
+                                            want,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         bench_add_chunks(snap.chunks.len());
         bench_add_blocks_changed(changed_coords.len());
 
@@ -414,15 +451,15 @@ pub fn rollback_checkpoint_on_server(game: &mut Game<'_>) -> bool {
 pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bool {
     let t_start = std::time::Instant::now();
     let t_globals = std::time::Instant::now();
+    let _ = game.save.flush();
+    for parked in game.levels.parked.values() {
+        let _ = parked.save.flush();
+    }
     game.world.loaded_entities.clear();
-    let snap = match get_slot_snapshot_clone(slot) {
+    let mut snap = match get_slot_snapshot_clone(slot) {
         Some(s) => s,
-        None => match load_slot_from_disk(&game.world_root, slot) {
-            Some(s) => {
-                let arc = Arc::new(s);
-                set_slot_snapshot(slot, Arc::clone(&arc));
-                arc
-            }
+        None => match hydrate_slot_from_disk_on_server(game, slot) {
+            Some(s) => s,
             None => return false,
         },
     };
@@ -436,17 +473,29 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             snap.levels.keys().copied().next().unwrap_or(Dim::Overworld)
         });
 
+    if !snap.levels.contains_key(&target_dim) {
+        if let Some(hydrated) = hydrate_slot_from_disk_on_server(game, slot) {
+            snap = hydrated;
+        }
+    }
+
+    let need_force_disk = !snap.disk_restored;
     let is_hot_rollback = slot == "default"
         && game.dim == target_dim
-        && snap.levels.contains_key(&game.dim);
-    let disk_files_changed = restore_disk_files_for_slot(&game.world_root, slot);
-    if !is_hot_rollback || disk_files_changed > 0 {
+        && snap.levels.contains_key(&game.dim)
+        && !need_force_disk;
+    let disk_files_changed =
+        restore_disk_files_for_slot_opts(&game.world_root, slot, need_force_disk);
+    if need_force_disk || !is_hot_rollback || disk_files_changed > 0 {
         let new_save = horizon_client::save::SaveDir::new(
             game.save.root.clone(),
             game.save.shape,
         );
         if let Some(tables) = game.save.tables.get() {
             let _ = new_save.tables.set(Arc::clone(tables));
+        } else {
+            let tables = Arc::new(horizon_client::save::SaveTables::new(&game.pack.assets));
+            let _ = new_save.tables.set(tables);
         }
         game.save = Arc::new(new_save);
     }
@@ -565,6 +614,12 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
             game.level.seed,
             &game.level.enabled_features,
         ) {
+            if let Some(tables) = game.save.tables.get() {
+                let _ = fresh_save.tables.set(Arc::clone(tables));
+            } else {
+                let tables = Arc::new(horizon_client::save::SaveTables::new(&game.pack.assets));
+                let _ = fresh_save.tables.set(tables);
+            }
             game.streaming = fresh_streaming;
             game.save = fresh_save;
         }
@@ -1006,6 +1061,17 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);
+
+    if need_force_disk || !snap.levels.contains_key(&target_dim) {
+        let mut updated = (*snap).clone();
+        updated.disk_restored = true;
+        if !updated.levels.contains_key(&target_dim) {
+            updated
+                .levels
+                .insert(target_dim, capture_level_snapshot(game, target_dim));
+        }
+        set_slot_snapshot(slot, Arc::new(updated));
+    }
 
     let client_snap = ClientBlockSnapshot {
         dim: game.dim,

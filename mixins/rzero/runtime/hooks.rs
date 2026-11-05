@@ -4,7 +4,9 @@ use super::super::{
 };
 use super::adaptive::tick_autosave_on_server;
 use super::capture::create_checkpoint_on_server;
-use super::persistence::{has_disk_checkpoint, load_checkpoint_from_disk};
+use super::persistence::{
+    has_disk_checkpoint, hydrate_slot_from_disk_on_server, load_checkpoint_from_disk,
+};
 use super::restore::{apply_client_level_rollback, rollback_checkpoint_on_server};
 use super::snapshots::*;
 use super::types::*;
@@ -34,7 +36,6 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
     } else if key == load_key {
         game.close_container();
         game.screen = super::super::Screen::Playing;
-        apply_client_level_rollback(game, "default");
         if let Some(server) = &game.integrated {
             let msg = server.call(|srv| {
                 if rollback_checkpoint_on_server(srv) {
@@ -46,6 +47,8 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
                     "[RZero] Rollback aborted: No timeline origin found.".to_owned()
                 }
             });
+            let slot = with_state(|st| st.current_slot.clone());
+            apply_client_level_rollback(game, &slot);
             if let Some(text) = msg {
                 game.native_chat(&text);
             }
@@ -66,26 +69,30 @@ pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
     match phase {
         WorldPhase::WorldOpenReady => {
             load_saved_settings(game);
+            clear_all_slots();
+            clear_client_snapshots();
             let has_disk_cp = has_disk_checkpoint(&game.world_root);
+            let mut restored_anchors = HashSet::new();
+            let mut restored_save_tick = game.world.game_time;
             if has_disk_cp {
-                if get_snapshot_clone().is_none() {
-                    if let Some(snap) = load_checkpoint_from_disk(&game.world_root) {
-                        set_snapshot(Some(Arc::new(snap)));
-                    }
+                if let Some(snap) = load_checkpoint_from_disk(&game.world_root) {
+                    restored_anchors = snap.anchor_ids.clone();
+                    restored_save_tick = snap.game_time;
+                    set_snapshot(Some(Arc::new(snap)));
                 }
                 with_state_mut(|st| {
                     st.has_checkpoint = true;
                 });
             } else {
-                clear_snapshot();
                 with_state_mut(|st| {
                     st.has_checkpoint = false;
                 });
             }
             with_state_mut(|st| {
-                st.anchor_ids.clear();
+                st.current_slot = "default".to_owned();
+                st.anchor_ids = restored_anchors;
                 st.pending_death_rollback = None;
-                st.last_save_tick = game.world.game_time;
+                st.last_save_tick = restored_save_tick;
                 st.current_interval_ticks = i64::from(st.fixed_interval_sec.max(5)) * 20;
                 st.last_rollback_tick = None;
                 st.last_boss_death_tick = -9999;
@@ -97,6 +104,8 @@ pub fn handle_lifecycle(game: &mut Game<'_>, phase: WorldPhase) {
         WorldPhase::WorldCloseFinal
         | WorldPhase::WorldCloseFailed
         | WorldPhase::WorldOpenFailed => {
+            clear_all_slots();
+            clear_client_snapshots();
             with_state_mut(|st| {
                 st.pending_death_rollback = None;
             });
@@ -136,7 +145,6 @@ pub fn handle_tick(game: &mut Game<'_>) {
                 p.health.hurt_dir = 0.0;
                 p.health.indicated_dir = None;
             }
-            apply_client_level_rollback(game, "default");
             if let Some(server) = &game.integrated {
                 server.call(|srv| {
                     rollback_checkpoint_on_server(srv);
@@ -144,12 +152,10 @@ pub fn handle_tick(game: &mut Game<'_>) {
             } else {
                 rollback_checkpoint_on_server(game);
             }
+            let slot = with_state(|st| st.current_slot.clone());
+            apply_client_level_rollback(game, &slot);
             return;
         }
-    }
-
-    if game.native_window() {
-        return;
     }
 
     if game.remote.is_some() {
@@ -173,6 +179,10 @@ pub fn handle_tick(game: &mut Game<'_>) {
         }
     }
 
+    if game.native_window() {
+        return;
+    }
+
     let (do_save, do_load, dead_rollback) = with_state_mut(|st| {
         (
             std::mem::replace(&mut st.pending_save_request, false),
@@ -185,12 +195,21 @@ pub fn handle_tick(game: &mut Game<'_>) {
         create_checkpoint_on_server(game, None);
     }
     if do_load || dead_rollback.is_some() {
-        apply_client_level_rollback(game, "default");
         rollback_checkpoint_on_server(game);
+        let slot = with_state(|st| st.current_slot.clone());
+        apply_client_level_rollback(game, &slot);
         return;
     }
 
     if with_state(|st| st.has_checkpoint) {
+        if !game.world.chunks.is_empty() {
+            let active_slot = with_state(|st| st.current_slot.clone());
+            let needs_hydration = get_slot_snapshot_clone(&active_slot)
+                .is_none_or(|s| !s.levels.contains_key(&game.dim));
+            if needs_hydration {
+                let _ = hydrate_slot_from_disk_on_server(game, &active_slot);
+            }
+        }
         if let Ok(mut tr) = loop_tracker().write() {
             tr.record_tick(game.world.game_time, &game.mobs);
         }

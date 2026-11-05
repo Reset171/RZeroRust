@@ -35,7 +35,6 @@ pub fn execute_rzero_command(
         }
         "load" | "rollback" => {
             let slot = words.get(2).copied().unwrap_or("default");
-            apply_client_level_rollback(game, slot);
             if rollback_slot_checkpoint_on_server(game, slot) {
                 with_state_mut(|st| st.current_slot = slot.to_owned());
                 format!(
@@ -51,7 +50,6 @@ pub fn execute_rzero_command(
         "metrics" => report_metrics_json(game),
         "rewind" => {
             let slot = words.get(2).copied().unwrap_or("default");
-            apply_client_level_rollback(game, slot);
             if rollback_slot_checkpoint_on_server(game, slot) {
                 format!("[RZero] Immediate rewind executed to slot '{}'.", slot)
             } else {
@@ -60,7 +58,7 @@ pub fn execute_rzero_command(
         }
         "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
         "purge_memory" => {
-            clear_snapshot();
+            clear_all_slots();
             clear_client_snapshots();
             "[RZero] In-memory snapshots cleared.".to_owned()
         }
@@ -129,7 +127,6 @@ pub fn handle_slot_subcommand(
         }
         "load" => {
             let name = args.get(1).copied().unwrap_or("default");
-            apply_client_level_rollback(game, name);
             if rollback_slot_checkpoint_on_server(game, name) {
                 with_state_mut(|st| st.current_slot = name.to_owned());
                 format!("[RZero] Rolled back to slot '{}'.", name)
@@ -577,12 +574,21 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
     let cmd_owned = trimmed.to_owned();
     if let Some(server) = &game.integrated {
         if let Some(lines) = server.call(move |srv| execute_rzero_command(srv, None, &cmd_owned)) {
+            if is_rollback {
+                let slot = with_state(|st| st.current_slot.clone());
+                apply_client_level_rollback(game, &slot);
+            }
             for line in lines {
                 game.native_chat(&line);
             }
         }
     } else {
-        for line in execute_rzero_command(game, None, &cmd_owned) {
+        let lines = execute_rzero_command(game, None, &cmd_owned);
+        if is_rollback {
+            let slot = with_state(|st| st.current_slot.clone());
+            apply_client_level_rollback(game, &slot);
+        }
+        for line in lines {
             game.native_chat(&line);
         }
     }
