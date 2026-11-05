@@ -1,12 +1,91 @@
-use super::super::Dim;
+use super::super::{Dim, Game};
+use horizon_client::lang;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 
 pub const MOD_ID: &str = "rzero";
 pub const RBD_SOUND_ID: &str = "rzero:rbd_sound";
+
+static LANG_MAPS: OnceLock<(HashMap<String, String>, HashMap<String, String>)> = OnceLock::new();
+
+fn lang_maps() -> &'static (HashMap<String, String>, HashMap<String, String>) {
+    LANG_MAPS.get_or_init(|| {
+        let en: HashMap<String, String> =
+            serde_json::from_str(LANG_EN_US_JSON).unwrap_or_default();
+        let ru: HashMap<String, String> =
+            serde_json::from_str(LANG_RU_RU_JSON).unwrap_or_default();
+        (en, ru)
+    })
+}
+
+pub fn is_ru_locale() -> bool {
+    lang::code().to_ascii_lowercase().starts_with("ru")
+}
+
+pub fn tr(key: &str) -> String {
+    let (en, ru) = lang_maps();
+    if is_ru_locale() {
+        if let Some(val) = ru.get(key) {
+            return val.clone();
+        }
+    }
+    en.get(key).cloned().unwrap_or_else(|| key.to_owned())
+}
+
+pub fn tr_args(key: &str, args: &[&str]) -> String {
+    let mut out = tr(key);
+    for arg in args {
+        if let Some(pos) = out.find("%s") {
+            out.replace_range(pos..pos + 2, arg);
+        }
+    }
+    out
+}
+
+pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
+    if game.allow_commands() {
+        let Some(req) = requester else {
+            return true;
+        };
+        if let Some(host) = &game.lan {
+            if host.owner.as_ref().is_some_and(|o| o.uuid == req) {
+                return true;
+            }
+            if host.hub.ops.get(&req).copied().unwrap_or(0) >= 2 {
+                return true;
+            }
+            if host
+                .hub
+                .guests
+                .iter()
+                .find(|g| g.uuid == req)
+                .is_some_and(|g| g.permission >= 2)
+            {
+                return true;
+            }
+            return host.hub.config.guest_commands;
+        }
+        return true;
+    }
+    if let Some(host) = &game.lan {
+        if let Some(req) = requester {
+            return host.hub.ops.get(&req).copied().unwrap_or(0) >= 2
+                || host
+                    .hub
+                    .guests
+                    .iter()
+                    .find(|g| g.uuid == req)
+                    .is_some_and(|g| g.permission >= 2);
+        }
+        if let Some(owner) = &host.owner {
+            return host.hub.ops.get(&owner.uuid).copied().unwrap_or(0) >= 2;
+        }
+    }
+    false
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AnchorMode {
@@ -23,6 +102,15 @@ impl AnchorMode {
             Self::Multi => "multi",
             Self::Everyone => "everyone",
             Self::Rotating => "rotating",
+        }
+    }
+
+    pub fn lang_key(self) -> &'static str {
+        match self {
+            Self::Fixed => "config.rzero.anchorMode.fixed",
+            Self::Multi => "config.rzero.anchorMode.multi",
+            Self::Everyone => "config.rzero.anchorMode.everyone",
+            Self::Rotating => "config.rzero.anchorMode.rotating",
         }
     }
 
@@ -278,18 +366,18 @@ impl Default for RZeroState {
         Self {
             current_slot: "default".to_owned(),
             auto_save: true,
-            adaptive_mode: false,
+            adaptive_mode: true,
             use_random_interval: false,
             fixed_interval_sec: 300,
             random_min_sec: 300,
             random_max_sec: 600,
             adaptive_interval_sec: 300,
-            min_save_gap_sec: 15,
-            relax_time_sec: 10,
-            post_combat_save_pct: 100,
+            min_save_gap_sec: 30,
+            relax_time_sec: 5,
+            post_combat_save_pct: 70,
             save_on_boss_defeat: true,
             play_rollback_sound: true,
-            logs: true,
+            logs: false,
             policy: RollbackPolicy::default(),
             anchor: AnchorSettings::default(),
             anchor_ids: HashSet::new(),

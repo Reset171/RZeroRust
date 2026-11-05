@@ -3,6 +3,8 @@ use std::path::Path;
 
 fn main() {
     println!("cargo:rerun-if-changed=mixins/rzero/runtime");
+    println!("cargo:rerun-if-changed=assets/rzero/lang/en_us.json");
+    println!("cargo:rerun-if-changed=assets/rzero/lang/ru_ru.json");
     for file_name in [
         "types.rs",
         "snapshots.rs",
@@ -70,6 +72,7 @@ use horizon_client::{
     gamerules::GameRules,
     items::ItemStack,
     lan::guest::SavedBody,
+    lang,
     mobs::Species,
     projectiles::Projectile,
     recipe_book::Settings as RecipeBookSettings,
@@ -114,6 +117,14 @@ use std::{
 "#;
 
     let mut out = String::from(header);
+    let en_json = fs::read_to_string("assets/rzero/lang/en_us.json")
+        .expect("Could not read assets/rzero/lang/en_us.json");
+    let ru_json = fs::read_to_string("assets/rzero/lang/ru_ru.json")
+        .expect("Could not read assets/rzero/lang/ru_ru.json");
+    out.push_str(&format!(
+        "\npub const LANG_EN_US_JSON: &str = {:?};\npub const LANG_RU_RU_JSON: &str = {:?};\n",
+        en_json, ru_json
+    ));
 
     for file_name in &files {
         let path = runtime_dir.join(file_name);

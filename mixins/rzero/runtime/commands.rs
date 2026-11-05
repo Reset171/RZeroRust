@@ -31,18 +31,18 @@ pub fn execute_rzero_command(
             let slot = words.get(2).copied().unwrap_or("default");
             create_slot_checkpoint_on_server(game, requester, slot);
             with_state_mut(|st| st.current_slot = slot.to_owned());
-            format!("[RZero] Checkpoint saved to slot '{}' successfully.", slot)
+            tr_args("command.rzero.set.slot_success", &[slot])
         }
         "load" | "rollback" => {
             let slot = words.get(2).copied().unwrap_or("default");
             if rollback_slot_checkpoint_on_server(game, slot) {
                 with_state_mut(|st| st.current_slot = slot.to_owned());
-                format!(
-                    "[RZero] Timeline rolled back to slot '{}' (tick={}).",
-                    slot, game.world.game_time
+                tr_args(
+                    "command.rzero.load.slot_success",
+                    &[slot, &game.world.game_time.to_string()],
                 )
             } else {
-                format!("[RZero] Rollback aborted: No timeline origin found for slot '{}'.", slot)
+                tr_args("command.rzero.load.slot_failed", &[slot])
             }
         }
         "slot" | "slots" => handle_slot_subcommand(game, &words[2..], requester),
@@ -74,7 +74,12 @@ pub fn execute_rzero_command(
             };
             with_state_mut(|st| st.f3_loop_hitboxes = val);
             save_current_settings(game);
-            format!("[RZero] F3 loop hitboxes: {}", if val { "ON" } else { "OFF" })
+            let state_str = if val {
+                tr("ui.rzero.on")
+            } else {
+                tr("ui.rzero.off")
+            };
+            tr_args("command.rzero.f3.status", &[&state_str])
         }
         _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench|f3>".to_owned(),
     };
@@ -567,14 +572,17 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
         || trimmed.starts_with("rzero rewind ")
         || trimmed.starts_with("rzero slot load ")
         || trimmed.starts_with("rzero trigger rewind");
-    if is_rollback {
-        game.close_container();
-        game.screen = super::super::Screen::Playing;
-    }
     let cmd_owned = trimmed.to_owned();
     if let Some(server) = &game.integrated {
-        if let Some(lines) = server.call(move |srv| execute_rzero_command(srv, None, &cmd_owned)) {
-            if is_rollback {
+        if let Some((allowed, lines)) = server.call(move |srv| {
+            if !has_cheat_permission(srv, None) {
+                return (false, vec![tr("command.rzero.no_permission")]);
+            }
+            (true, execute_rzero_command(srv, None, &cmd_owned))
+        }) {
+            if allowed && is_rollback {
+                game.close_container();
+                game.screen = super::super::Screen::Playing;
                 let slot = with_state(|st| st.current_slot.clone());
                 apply_client_level_rollback(game, &slot);
             }
@@ -583,6 +591,14 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
             }
         }
     } else {
+        if !has_cheat_permission(game, None) {
+            game.native_chat(&tr("command.rzero.no_permission"));
+            return;
+        }
+        if is_rollback {
+            game.close_container();
+            game.screen = super::super::Screen::Playing;
+        }
         let lines = execute_rzero_command(game, None, &cmd_owned);
         if is_rollback {
             let slot = with_state(|st| st.current_slot.clone());
@@ -635,6 +651,23 @@ pub fn intercept_guest_command(
         return ControlFlow::Continue(());
     }
     let requester = host.hub.guest(conn).map(|g| g.uuid);
+    let is_owner = requester.is_some_and(|u| host.owner.as_ref().is_some_and(|o| o.uuid == u));
+    let has_op = host.hub.guest(conn).is_some_and(|g| {
+        g.permission >= 2 || host.hub.ops.get(&g.uuid).copied().unwrap_or(0) >= 2
+    });
+    let allowed = has_op
+        || (is_owner && game.allow_commands())
+        || (host.hub.config.guest_commands && game.allow_commands());
+    if !allowed {
+        if let Some(g) = host.hub.guest(conn) {
+            let msg = tr("command.rzero.no_permission");
+            g.send(&C::SystemChat(play::SystemChat {
+                content: literal(&msg),
+                overlay: false,
+            }));
+        }
+        return ControlFlow::Break(());
+    }
     let lines = execute_rzero_command(game, requester, trimmed);
     if let Some(g) = host.hub.guest(conn) {
         for line in lines {

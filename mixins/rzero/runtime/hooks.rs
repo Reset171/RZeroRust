@@ -24,44 +24,73 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
     if key == save_key {
         if let Some(server) = &game.integrated {
             let msg = server.call(|srv| {
+                if !has_cheat_permission(srv, None) {
+                    return tr("command.rzero.no_permission");
+                }
                 create_checkpoint_on_server(srv, None);
-                "[RZero] Checkpoint created successfully.".to_owned()
+                tr("command.rzero.set.success")
             });
             if let Some(text) = msg {
                 game.native_chat(&text);
             }
+        } else if !has_cheat_permission(game, None) {
+            game.native_chat(&tr("command.rzero.no_permission"));
         } else {
             with_state_mut(|st| st.pending_save_request = true);
         }
     } else if key == load_key {
-        game.close_container();
-        game.screen = super::super::Screen::Playing;
         if let Some(server) = &game.integrated {
-            let msg = server.call(|srv| {
+            let res = server.call(|srv| {
+                if !has_cheat_permission(srv, None) {
+                    return (false, tr("command.rzero.no_permission"));
+                }
                 if rollback_checkpoint_on_server(srv) {
-                    format!(
-                        "[RZero] Timeline rolled back to checkpoint (tick={}).",
-                        srv.world.game_time
+                    (
+                        true,
+                        tr_args(
+                            "command.rzero.load.success",
+                            &[&srv.world.game_time.to_string()],
+                        ),
                     )
                 } else {
-                    "[RZero] Rollback aborted: No timeline origin found.".to_owned()
+                    (false, tr("command.rzero.load.failed"))
                 }
             });
-            let slot = with_state(|st| st.current_slot.clone());
-            apply_client_level_rollback(game, &slot);
-            if let Some(text) = msg {
+            if let Some((did_rollback, text)) = res {
+                if did_rollback {
+                    game.close_container();
+                    game.screen = super::super::Screen::Playing;
+                    let slot = with_state(|st| st.current_slot.clone());
+                    apply_client_level_rollback(game, &slot);
+                }
                 game.native_chat(&text);
             }
+        } else if !has_cheat_permission(game, None) {
+            game.native_chat(&tr("command.rzero.no_permission"));
         } else {
+            game.close_container();
+            game.screen = super::super::Screen::Playing;
             with_state_mut(|st| st.pending_load_request = true);
         }
     } else if key == mode_key {
+        let allowed = if let Some(server) = &game.integrated {
+            server
+                .call(|srv| has_cheat_permission(srv, None))
+                .unwrap_or(false)
+        } else {
+            has_cheat_permission(game, None)
+        };
+        if !allowed {
+            game.native_chat(&tr("gui.rzero.anchor.no_permission"));
+            return;
+        }
         let next_mode = with_state_mut(|st| {
             st.anchor.mode = st.anchor.mode.next();
             st.anchor.mode
         });
         save_current_settings(game);
-        game.native_chat(&format!("[RZero] Key player mode: {}", next_mode.id()));
+        let mode_label = tr(next_mode.lang_key());
+        game.native_chat(&tr_args("command.rzero.anchor.mode", &[&mode_label]));
     }
 }
 

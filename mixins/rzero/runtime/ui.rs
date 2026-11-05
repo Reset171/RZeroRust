@@ -12,23 +12,21 @@ pub fn register_native_mod(mods: &mut Vec<NativeMod>) {
     mods.push(NativeMod {
         id: MOD_ID.to_owned(),
         title: "RZero 0.1.0".to_owned(),
-        description:
-            "Return by Death. Completely rewind the timeline and the world state to your last checkpoint upon death."
-                .to_owned(),
+        description: tr("mod.rzero.description"),
         keys: vec![
             [
                 "save".to_owned(),
-                "Create Checkpoint".to_owned(),
+                tr("key.rzero.save"),
                 "key.keyboard.f6".to_owned(),
             ],
             [
                 "load".to_owned(),
-                "Return to Checkpoint".to_owned(),
+                tr("key.rzero.load"),
                 "key.keyboard.f7".to_owned(),
             ],
             [
                 "anchor_menu".to_owned(),
-                "Cycle Key Player Mode".to_owned(),
+                tr("key.rzero.anchor_menu"),
                 "key.keyboard.f8".to_owned(),
             ],
         ],
@@ -40,31 +38,39 @@ pub fn populate_settings(game: &mut Game<'_>, mod_id: &str, buttons: &mut Vec<St
         return;
     }
     load_saved_settings(game);
+    let on = tr("ui.rzero.on");
+    let off = tr("ui.rzero.off");
     with_state(|st| {
-        buttons.push(format!(
-            "Auto-Save: {}",
-            if st.auto_save { "ON" } else { "OFF" }
+        buttons.push(tr_args(
+            "ui.rzero.auto_save",
+            &[if st.auto_save { &on } else { &off }],
         ));
-        buttons.push(format!(
-            "Adaptive Save: {}",
-            if st.adaptive_mode { "ON" } else { "OFF" }
+        buttons.push(tr_args(
+            "ui.rzero.adaptive_save",
+            &[if st.adaptive_mode { &on } else { &off }],
         ));
-        buttons.push(format!("Auto-Save Interval: {} s", st.fixed_interval_sec));
-        buttons.push(format!("Key Player Mode: {}", st.anchor.mode.id()));
+        buttons.push(tr_args(
+            "ui.rzero.interval",
+            &[&st.fixed_interval_sec.to_string()],
+        ));
+        buttons.push(tr_args(
+            "ui.rzero.anchor_mode",
+            &[&tr(st.anchor.mode.lang_key())],
+        ));
         let cd = st.anchor.rollback_cooldown_seconds;
-        buttons.push(if cd <= 0 {
-            "Rollback Cooldown: Off".to_owned()
+        if cd <= 0 {
+            buttons.push(tr("ui.rzero.cooldown_off"));
         } else {
-            format!("Rollback Cooldown: {cd} s")
-        });
-        buttons.push(format!(
-            "Checkpoint on Boss Defeat: {}",
-            if st.save_on_boss_defeat { "ON" } else { "OFF" }
+            buttons.push(tr_args("ui.rzero.cooldown", &[&cd.to_string()]));
+        }
+        buttons.push(tr_args(
+            "ui.rzero.boss_save",
+            &[if st.save_on_boss_defeat { &on } else { &off }],
         ));
-        buttons.push(format!("Logs: {}", if st.logs { "ON" } else { "OFF" }));
-        buttons.push(format!(
-            "F3 Loop Hitboxes: {}",
-            if st.f3_loop_hitboxes { "ON" } else { "OFF" }
+        buttons.push(tr_args("ui.rzero.logs", &[if st.logs { &on } else { &off }]));
+        buttons.push(tr_args(
+            "ui.rzero.f3_hitboxes",
+            &[if st.f3_loop_hitboxes { &on } else { &off }],
         ));
     });
 }
@@ -111,7 +117,7 @@ pub fn load_saved_settings(game: &Game<'_>) {
         .map(|v| v != "false");
     let adaptive = game
         .native_setting(MOD_ID, "adaptive_mode")
-        .map(|v| v == "true");
+        .map(|v| v != "false");
     let interval = game
         .native_setting(MOD_ID, "fixed_interval_sec")
         .and_then(|v| v.parse::<i32>().ok());

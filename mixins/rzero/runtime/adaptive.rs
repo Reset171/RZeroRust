@@ -235,6 +235,36 @@ pub fn calculate_guest_threat(game: &Game<'_>, g: &horizon_client::lan::guest::G
 pub fn tick_autosave_on_server(game: &mut Game<'_>) {
     let now = game.world.game_time;
 
+    let (auto_save, adaptive_mode, has_checkpoint) =
+        with_state(|st| (st.auto_save, st.adaptive_mode, st.has_checkpoint));
+    if auto_save && !has_checkpoint && !game.world.chunks.is_empty() {
+        let initial_player = game.lan.as_ref().and_then(|h| {
+            h.hub
+                .guests
+                .iter()
+                .find(|g| g.placed && is_guest_safe(game, g))
+                .map(|g| g.uuid)
+        });
+        if let Some(uuid) = initial_player {
+            create_checkpoint_on_server(game, Some(uuid));
+            with_state_mut(|st| {
+                st.current_interval_ticks = if st.use_random_interval {
+                    let min = st.random_min_sec.max(5);
+                    let max = st.random_max_sec.max(min + 1);
+                    let mut rng = LegacyRandom::new(now);
+                    let extra = rng.next_int_bound((max - min) + 1).unwrap_or(0);
+                    i64::from(min + extra) * 20
+                } else {
+                    i64::from(st.fixed_interval_sec.max(5)) * 20
+                };
+            });
+            if with_state(|st| st.logs) {
+                log::info!("[RZero] Initial checkpoint created on player join.");
+            }
+            return;
+        }
+    }
+
     let boss_just_died = game.dragon.as_ref().is_some_and(|d| d.death_time == 1)
         || game.mobs.iter().any(|m| {
             m.species() == Species::Wither && !m.alive() && m.death_time == 1
@@ -256,16 +286,13 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
             if safe {
                 create_checkpoint_on_server(game, None);
                 if with_state(|st| st.logs) {
-                    game.system_message(Text::literal(
-                        "[RZero] Boss defeat checkpoint created.",
-                    ));
+                    log::info!("[RZero] Boss defeat checkpoint created.");
                 }
                 return;
             }
         }
     }
 
-    let (auto_save, adaptive_mode) = with_state(|st| (st.auto_save, st.adaptive_mode));
     if !auto_save {
         return;
     }
@@ -275,11 +302,30 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
         if !due {
             return;
         }
-        let any_safe = game
-            .lan
-            .as_ref()
-            .is_some_and(|h| h.hub.guests.iter().any(|g| is_guest_safe(game, g)));
-        if any_safe {
+        let all_anchors_safe = game.lan.as_ref().is_some_and(|host| {
+            let online: Vec<u128> = host
+                .hub
+                .guests
+                .iter()
+                .filter(|g| g.placed)
+                .map(|g| g.uuid)
+                .collect();
+            let anchors = with_state(|st| resolve_anchors(&st.anchor, &online, now, None));
+            let mut count = 0usize;
+            for g in host
+                .hub
+                .guests
+                .iter()
+                .filter(|g| g.placed && anchors.contains(&g.uuid))
+            {
+                count += 1;
+                if !is_guest_safe(game, g) {
+                    return false;
+                }
+            }
+            count > 0
+        });
+        if all_anchors_safe {
             create_checkpoint_on_server(game, None);
             with_state_mut(|st| {
                 st.current_interval_ticks = if st.use_random_interval {
@@ -293,7 +339,7 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
                 };
             });
             if with_state(|st| st.logs) {
-                game.system_message(Text::literal("[RZero] Auto-saved checkpoint."));
+                log::info!("[RZero] Auto-saved checkpoint.");
             }
         }
         return;
@@ -378,7 +424,7 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
     if should_save {
         create_checkpoint_on_server(game, None);
         if with_state(|st| st.logs) {
-            game.system_message(Text::literal("[RZero] Adaptive checkpoint created."));
+            log::info!("[RZero] Adaptive checkpoint created.");
         }
     }
 }
