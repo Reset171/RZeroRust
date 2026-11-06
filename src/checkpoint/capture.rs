@@ -49,11 +49,13 @@ impl CheckpointWriter {
             AnchorSelector::resolve_anchors(&anchor_settings, &online_players, current_tick, requester);
         let primary_anchor = anchors.first().copied().or(requester);
 
-        let mut data = CheckpointData::default();
-        data.anchor_id = primary_anchor;
-        data.anchor_ids = anchors.iter().copied().collect();
-        data.scope = scope;
-        data.policy = policy;
+        let mut data = CheckpointData {
+            anchor_id: primary_anchor,
+            anchor_ids: anchors.iter().copied().collect(),
+            scope,
+            policy,
+            ..Default::default()
+        };
 
         let mut adaptive = AdaptiveSaveEngine::capture_adaptive_state();
         adaptive.entity_id_counter = EntityIdCounter::get();
@@ -191,6 +193,7 @@ impl ChunkCapture {
 pub struct EntityCapture;
 
 impl EntityCapture {
+    #[allow(clippy::too_many_arguments)]
     pub fn build_snapshot(
         entity_id: i32,
         uuid: u128,

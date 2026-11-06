@@ -1,18 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AnchorMode {
+    #[default]
     Fixed,
     Multi,
     Everyone,
     Rotating,
-}
-
-impl Default for AnchorMode {
-    fn default() -> Self {
-        Self::Fixed
-    }
 }
 
 impl AnchorMode {

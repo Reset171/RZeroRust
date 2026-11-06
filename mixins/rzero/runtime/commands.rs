@@ -81,7 +81,23 @@ pub fn execute_rzero_command(
             };
             tr_args("command.rzero.f3.status", &[&state_str])
         }
-        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench|f3>".to_owned(),
+        "dev" => {
+            let mode = words.get(2).copied();
+            let val = match mode {
+                Some("on" | "true" | "1") => true,
+                Some("off" | "false" | "0") => false,
+                _ => with_state(|st| !st.dev_mode),
+            };
+            with_state_mut(|st| st.dev_mode = val);
+            save_current_settings(game);
+            let state_str = if val {
+                tr("ui.rzero.on")
+            } else {
+                tr("ui.rzero.off")
+            };
+            tr_args("command.rzero.dev.status", &[&state_str])
+        }
+        _ => "[RZero] Usage: /rzero <set|load|json|status|slot|policy|metrics|anchor|autosave|bench|f3|dev>".to_owned(),
     };
     vec![reply]
 }
@@ -572,10 +588,11 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
         || trimmed.starts_with("rzero rewind ")
         || trimmed.starts_with("rzero slot load ")
         || trimmed.starts_with("rzero trigger rewind");
+    let is_dev_cmd = trimmed == "rzero dev" || trimmed.starts_with("rzero dev ");
     let cmd_owned = trimmed.to_owned();
     if let Some(server) = &game.integrated {
         if let Some((allowed, lines)) = server.call(move |srv| {
-            if !has_cheat_permission(srv, None) {
+            if !is_dev_cmd && !has_cheat_permission(srv, None) {
                 return (false, vec![tr("command.rzero.no_permission")]);
             }
             (true, execute_rzero_command(srv, None, &cmd_owned))
@@ -591,7 +608,7 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
             }
         }
     } else {
-        if !has_cheat_permission(game, None) {
+        if !is_dev_cmd && !has_cheat_permission(game, None) {
             game.native_chat(&tr("command.rzero.no_permission"));
             return;
         }

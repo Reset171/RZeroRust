@@ -3,6 +3,7 @@
 
 def setup_clean_env(h):
     """Restore server, policy, and player to a clean, loaded survival platform."""
+    h.rzero("dev on")
     h.command("tick unfreeze")
     h.command("tick rate 20")
     h.command("forceload remove all")

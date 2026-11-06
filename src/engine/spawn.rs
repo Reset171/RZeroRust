@@ -120,7 +120,7 @@ impl SpawnEngine {
             dim_hash,
             chunk_key,
             epoch ^ (category as i64),
-            0x7469_636B_6574_4C,
+            0x0074_6963_6B65_744C,
         );
         let stride = if category == MobCategory::Creature { 16 } else { 4 };
         ticket.rem_euclid(stride) == 0

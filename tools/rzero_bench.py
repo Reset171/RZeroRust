@@ -13,7 +13,7 @@ from pathlib import Path
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tools.rzero_harness import RZeroHarness
+from tools.rzero_harness import RZeroHarness, purge_test_worlds_on_disk
 
 
 def print_banner(title):
@@ -179,9 +179,11 @@ def main():
     parser = argparse.ArgumentParser(description="RZero Extreme Stress Benchmark")
     args = parser.parse_args()
 
-    h = RZeroHarness()
+    h = RZeroHarness(world=f"rzero_bench_{int(time.time())}")
     print("[Bench] Подключение к Horizon game-control.sock...")
     h.connect(timeout=45)
+    h.wait_ready(timeout=60)
+    h.rzero("dev on")
 
     try:
         bench_100k_blocks(h)
@@ -202,7 +204,12 @@ def main():
         print(f"\n🎮 Клиент рендера: FPS: {fps:.1f} | GPU VRAM: {vram_mb:.2f} MB")
         print("=" * 65)
     finally:
-        h.close()
+        h.cleanup_worlds()
+        if h.launched_new_process:
+            h.stop_instance()
+        else:
+            h.close()
+            purge_test_worlds_on_disk(h.instance)
 
 
 if __name__ == "__main__":

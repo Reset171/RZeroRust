@@ -46,6 +46,11 @@ pub fn tr_args(key: &str, args: &[&str]) -> String {
 }
 
 pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
+    if with_state(|st| st.dev_mode)
+        || std::env::var_os("RZERO_DEV").is_some_and(|v| v == "1" || v == "true")
+    {
+        return true;
+    }
     if game.allow_commands() {
         let Some(req) = requester else {
             return true;
@@ -359,6 +364,7 @@ pub struct RZeroState {
     pub pending_load_request: bool,
     pub last_benchmark: Option<RollbackBenchmark>,
     pub f3_loop_hitboxes: bool,
+    pub dev_mode: bool,
 }
 
 impl Default for RZeroState {
@@ -394,6 +400,7 @@ impl Default for RZeroState {
             pending_load_request: false,
             last_benchmark: None,
             f3_loop_hitboxes: true,
+            dev_mode: std::env::var_os("RZERO_DEV").is_some_and(|v| v == "1" || v == "true"),
         }
     }
 }

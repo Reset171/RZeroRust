@@ -72,6 +72,10 @@ pub fn populate_settings(game: &mut Game<'_>, mod_id: &str, buttons: &mut Vec<St
             "ui.rzero.f3_hitboxes",
             &[if st.f3_loop_hitboxes { &on } else { &off }],
         ));
+        buttons.push(tr_args(
+            "ui.rzero.dev_mode",
+            &[if st.dev_mode { &on } else { &off }],
+        ));
     });
 }
 
@@ -106,6 +110,7 @@ pub fn handle_settings_click(game: &mut Game<'_>, mod_id: &str, button: usize) {
         5 => st.save_on_boss_defeat = !st.save_on_boss_defeat,
         6 => st.logs = !st.logs,
         7 => st.f3_loop_hitboxes = !st.f3_loop_hitboxes,
+        8 => st.dev_mode = !st.dev_mode,
         _ => {}
     });
     save_current_settings(game);
@@ -134,6 +139,9 @@ pub fn load_saved_settings(game: &Game<'_>) {
     let f3_hitboxes = game
         .native_setting(MOD_ID, "f3_loop_hitboxes")
         .map(|v| v != "false");
+    let dev_mode = game
+        .native_setting(MOD_ID, "dev_mode")
+        .map(|v| v == "true");
 
     let json_cfg = fs::read_to_string(Path::new("config").join("rzero.json"))
         .ok()
@@ -232,6 +240,11 @@ pub fn load_saved_settings(game: &Game<'_>) {
         if let Some(v) = f3_hitboxes {
             st.f3_loop_hitboxes = v;
         }
+        if let Some(v) = dev_mode {
+            st.dev_mode = v;
+        } else if std::env::var_os("RZERO_DEV").is_some_and(|v| v == "1" || v == "true") {
+            st.dev_mode = true;
+        }
     });
 }
 
@@ -272,6 +285,11 @@ pub fn save_current_settings(game: &Game<'_>) {
             MOD_ID,
             "f3_loop_hitboxes",
             if st.f3_loop_hitboxes { "true" } else { "false" },
+        );
+        game.native_set_setting(
+            MOD_ID,
+            "dev_mode",
+            if st.dev_mode { "true" } else { "false" },
         );
     });
 }

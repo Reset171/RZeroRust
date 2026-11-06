@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from tools.rzero_harness import RZeroHarness
+from tools.rzero_harness import RZeroHarness, purge_test_worlds_on_disk
 from tools.tests.test_chunks import test_1_unloaded_chunks
 from tools.tests.test_explosions import (
     test_2_tnt_explosion_rollback,
@@ -185,15 +185,22 @@ def run_worker_batch(worker_idx, batch, use_default_socket=False, fresh_worlds=T
                 runner.run_test(test_id, name, fn)
 
         if heavy_tests:
-            if fresh_worlds and light_tests:
-                h.open_world(f"{base_world}_heavy", seed=12345)
-            for test_id, name, _, fn in heavy_tests:
+            last_group = None
+            for idx, (test_id, name, grp, fn) in enumerate(heavy_tests):
+                if fresh_worlds and (grp != last_group or (idx == 0 and light_tests)):
+                    h.open_world(f"{base_world}_{grp}", seed=12345)
+                    last_group = grp
                 runner.run_test(test_id, name, fn)
     finally:
         if use_default_socket:
             if fresh_worlds:
                 h.cleanup_worlds(keep_worlds=keep_worlds)
-            h.close()
+            if h.launched_new_process:
+                h.stop_instance(keep_worlds=keep_worlds)
+            else:
+                h.close()
+                if fresh_worlds and not keep_worlds:
+                    purge_test_worlds_on_disk(h.instance)
         else:
             h.stop_instance(keep_worlds=keep_worlds)
             if h.socket_path.exists():

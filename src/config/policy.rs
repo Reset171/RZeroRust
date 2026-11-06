@@ -4,21 +4,12 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RZeroCheckpointPolicy {
     #[serde(default)]
     pub rollback: Rollback,
     #[serde(default)]
     pub determinism: Determinism,
-}
-
-impl Default for RZeroCheckpointPolicy {
-    fn default() -> Self {
-        Self {
-            rollback: Rollback::default(),
-            determinism: Determinism::default(),
-        }
-    }
 }
 
 impl RZeroCheckpointPolicy {
@@ -294,7 +285,7 @@ impl ServerGlobals {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Determinism {
     #[serde(default)]
     pub natural_spawn: NaturalSpawn,
@@ -306,18 +297,6 @@ pub struct Determinism {
     pub spawns: Spawns,
     #[serde(default)]
     pub combat: Combat,
-}
-
-impl Default for Determinism {
-    fn default() -> Self {
-        Self {
-            natural_spawn: NaturalSpawn::default(),
-            mob_ai: MobAi::default(),
-            loot: Loot::default(),
-            spawns: Spawns::default(),
-            combat: Combat::default(),
-        }
-    }
 }
 
 impl Determinism {

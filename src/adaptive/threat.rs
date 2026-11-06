@@ -14,6 +14,7 @@ pub struct MobProbe {
 pub struct ThreatAssessor;
 
 impl ThreatAssessor {
+    #[allow(clippy::too_many_arguments)]
     pub fn calculate_instant_threat(
         player_uuid: u128,
         player_block_pos: [i32; 3],

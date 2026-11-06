@@ -107,12 +107,12 @@ impl SurvivalClassifier {
 
         let mut dread = 0.0;
         let mut hope = 0.0;
-        for i in 0..Self::N {
+        for (i, &val) in input.iter().enumerate().take(Self::N) {
             let s = Self::SIGN[i];
             if s == 0 {
                 continue;
             }
-            let z = ((input[i] - Self::BASELINE[i]) / Self::SCALE[i] * f64::from(s)).clamp(-6.0, 6.0);
+            let z = ((val - Self::BASELINE[i]) / Self::SCALE[i] * f64::from(s)).clamp(-6.0, 6.0);
             if z > 0.0 {
                 dread += z;
             } else {
@@ -123,11 +123,11 @@ impl SurvivalClassifier {
         let mut worst_memory = 0.0f64;
         for m in &Self::MEMORIES {
             let mut d2 = 0.0;
-            for i in 0..Self::N {
+            for (i, &val) in input.iter().enumerate().take(Self::N) {
                 if Self::SIGN[i] == 0 {
                     continue;
                 }
-                let dx = (input[i] - m[i]) / Self::SCALE[i];
+                let dx = (val - m[i]) / Self::SCALE[i];
                 d2 += dx * dx;
             }
             let sim = (-d2 / Self::RBF_BANDWIDTH).exp();

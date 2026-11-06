@@ -194,5 +194,7 @@
   "command.rzero.set.slot_success": "[RZero] Точка сохранения успешно записана в слот '%s'.",
   "command.rzero.load.slot_success": "[RZero] Мир возвращён к слоту '%s' (тик=%s).",
   "command.rzero.load.slot_failed": "[RZero] Откат отменён: точка сохранения для слота '%s' не найдена.",
-  "command.rzero.f3.status": "[RZero] Подсветка петель F3+B: %s"
+  "command.rzero.f3.status": "[RZero] Подсветка петель F3+B: %s",
+  "ui.rzero.dev_mode": "Режим разработчика: %s",
+  "command.rzero.dev.status": "[RZero] Режим разработчика: %s"
 }

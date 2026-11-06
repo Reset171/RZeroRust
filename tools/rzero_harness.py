@@ -8,12 +8,50 @@ import time
 from pathlib import Path
 
 DEFAULT_SOCKET = Path(os.environ.get("HORIZON_CONTROL", f"/run/user/{os.getuid()}/horizon-control.sock"))
-DEFAULT_INSTANCE = "native-mods"
+DEFAULT_INSTANCE = os.environ.get("HORIZON_INSTANCE")
+LAUNCHER_BIN = shutil.which("horizon-launcher") or "/usr/lib/horizon-launcher/horizon-launcher"
 
 
 def default_saves_dir(instance=DEFAULT_INSTANCE):
     data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    if not instance:
+        try:
+            out = subprocess.check_output(
+                [LAUNCHER_BIN, "--json", "instance", "list"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=5,
+            )
+            for item in json.loads(out):
+                if item.get("selected") and item.get("home"):
+                    return Path(item["home"]) / "saves"
+        except Exception:
+            pass
+        return data_home / "horizon" / "saves"
+    if instance == "horizon":
+        return data_home / "horizon" / "saves"
     return data_home / "horizon" / "instances" / instance / "saves"
+
+
+def purge_test_worlds_on_disk(instance=DEFAULT_INSTANCE):
+    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    saves_dirs = [
+        default_saves_dir(instance),
+        data_home / "horizon" / "saves",
+    ]
+    inst_root = data_home / "horizon" / "instances"
+    if inst_root.is_dir():
+        for d in inst_root.iterdir():
+            if d.is_dir():
+                saves_dirs.append(d / "saves")
+    for s_dir in saves_dirs:
+        if not s_dir.is_dir():
+            continue
+        for entry in s_dir.iterdir():
+            if entry.is_dir() and (
+                entry.name.startswith("rzero_e2e_") or entry.name.startswith("rzero_bench_")
+            ):
+                shutil.rmtree(entry, ignore_errors=True)
 
 
 class RZeroHarness:
@@ -94,7 +132,14 @@ class RZeroHarness:
             return
         self.exit_to_title(timeout=30)
         saves = default_saves_dir(self.instance)
-        for w_name in list(self.created_worlds):
+        candidates = set(self.created_worlds)
+        if saves.is_dir():
+            for entry in saves.iterdir():
+                if entry.is_dir() and (
+                    entry.name.startswith("rzero_e2e_") or entry.name.startswith("rzero_bench_")
+                ):
+                    candidates.add(entry.name)
+        for w_name in sorted(candidates):
             if not w_name.startswith("rzero_"):
                 continue
             try:
@@ -104,6 +149,7 @@ class RZeroHarness:
             w_path = saves / w_name
             if w_path.exists():
                 shutil.rmtree(w_path, ignore_errors=True)
+        purge_test_worlds_on_disk(self.instance)
 
     def close(self):
         if self.sock:
@@ -129,6 +175,8 @@ class RZeroHarness:
                 except Exception:
                     pass
             self.proc = None
+        if not keep_worlds:
+            purge_test_worlds_on_disk(self.instance)
         if self.player_dir is not None and self.player_dir.exists():
             shutil.rmtree(self.player_dir, ignore_errors=True)
             self.player_dir = None
@@ -217,7 +265,7 @@ class RZeroHarness:
     def block(self, x, y, z):
         return self.raw_send(f"block {int(x)} {int(y)} {int(z)}")
 
-    def ensure_loaded(self, x, y, z, timeout_ticks=120):
+    def ensure_loaded(self, x, y, z, timeout_ticks=240):
         bx, by, bz = int(x), int(y), int(z)
         steps = max(1, timeout_ticks // 2)
         for _ in range(steps):
@@ -299,10 +347,12 @@ def launch_game(
     player_dir=None,
 ):
     cmd = [
-        "/usr/lib/horizon-launcher/horizon-launcher",
+        LAUNCHER_BIN,
         "play",
-        "--instance",
-        instance,
+    ]
+    if instance:
+        cmd += ["--instance", instance]
+    cmd += [
         "--world",
         world,
     ]
@@ -319,6 +369,7 @@ def launch_game(
     env["HORIZON_NO_AUDIO"] = "1"
     env["HORIZON_TELEMETRY_URL"] = "off"
     env["WGPU_BACKEND"] = "vulkan"
+    env["RZERO_DEV"] = "1"
     if socket_path is not None:
         env["HORIZON_CONTROL"] = str(socket_path)
     proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

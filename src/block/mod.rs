@@ -32,7 +32,7 @@ impl SectionSnapshot {
             None
         } else {
             let values_per_long = 64 / usize::from(bits);
-            let words = (SECTION_SIZE + values_per_long - 1) / values_per_long;
+            let words = SECTION_SIZE.div_ceil(values_per_long);
             let mut data = vec![0u64; words];
             for (idx, &pal_idx) in indices.iter().enumerate() {
                 let word = idx / values_per_long;
@@ -59,7 +59,7 @@ impl SectionSnapshot {
             None
         } else {
             let values_per_long = 64 / usize::from(b_bits);
-            let words = (BIOME_SECTION_SIZE + values_per_long - 1) / values_per_long;
+            let words = BIOME_SECTION_SIZE.div_ceil(values_per_long);
             let mut data = vec![0u64; words];
             for (idx, &pal_idx) in b_indices.iter().enumerate() {
                 let word = idx / values_per_long;
@@ -122,6 +122,7 @@ impl SectionSnapshot {
         self.biome_palette.get(pal_idx).copied().unwrap_or(0)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn apply_diff_to(
         &self,
         live_blocks: &mut [u32; SECTION_SIZE],

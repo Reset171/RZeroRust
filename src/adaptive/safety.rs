@@ -4,6 +4,7 @@ impl PlayerSafetyCheck {
     const GROUND_PROBE_DEPTH: i32 = 256;
     const FALL_DAMAGE_GRACE: f32 = 3.0;
 
+    #[allow(clippy::too_many_arguments)]
     pub fn is_player_safe(
         position: [f64; 3],
         on_ground: bool,

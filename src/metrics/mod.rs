@@ -96,6 +96,7 @@ impl PlayerMetrics {
 pub struct MetricsWriter;
 
 impl MetricsWriter {
+    #[allow(clippy::too_many_arguments)]
     pub fn write(
         player_uuid: u128,
         threat: f64,
