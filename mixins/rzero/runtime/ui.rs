@@ -11,7 +11,7 @@ use std::{
 pub fn register_native_mod(mods: &mut Vec<NativeMod>) {
     mods.push(NativeMod {
         id: MOD_ID.to_owned(),
-        title: "RZero 0.1.0".to_owned(),
+        title: format!("RZero {MOD_VERSION}"),
         description: tr("mod.rzero.description"),
         keys: vec![
             [

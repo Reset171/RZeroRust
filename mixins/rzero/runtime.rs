@@ -79,6 +79,7 @@ pub const LANG_RU_RU_JSON: &str = "{\n  \"key.categories.rzero\": \"RZero\",\n  
 
 
 pub const MOD_ID: &str = "rzero";
+pub const MOD_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RBD_SOUND_ID: &str = "rzero:rbd_sound";
 
 static LANG_MAPS: OnceLock<(HashMap<String, String>, HashMap<String, String>)> = OnceLock::new();
@@ -117,6 +118,14 @@ pub fn tr_args(key: &str, args: &[&str]) -> String {
     out
 }
 
+pub fn is_valid_slot_name(name: &str) -> bool {
+    let len = name.len();
+    (1..=32).contains(&len)
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
 pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
     if with_state(|st| st.dev_mode)
         || std::env::var_os("RZERO_DEV").is_some_and(|v| v == "1" || v == "true")
@@ -134,16 +143,12 @@ pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
             if host.hub.ops.get(&req).copied().unwrap_or(0) >= 2 {
                 return true;
             }
-            if host
+            return host
                 .hub
                 .guests
                 .iter()
                 .find(|g| g.uuid == req)
-                .is_some_and(|g| g.permission >= 2)
-            {
-                return true;
-            }
-            return host.hub.config.guest_commands;
+                .is_some_and(|g| g.permission >= 2);
         }
         return true;
     }
@@ -159,6 +164,49 @@ pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
         }
         if let Some(owner) = &host.owner {
             return host.hub.ops.get(&owner.uuid).copied().unwrap_or(0) >= 2;
+        }
+    }
+    false
+}
+
+pub fn has_level_4_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
+    if with_state(|st| st.dev_mode)
+        || std::env::var_os("RZERO_DEV").is_some_and(|v| v == "1" || v == "true")
+    {
+        return true;
+    }
+    if game.allow_commands() {
+        let Some(req) = requester else {
+            return true;
+        };
+        if let Some(host) = &game.lan {
+            if host.owner.as_ref().is_some_and(|o| o.uuid == req) {
+                return true;
+            }
+            if host.hub.ops.get(&req).copied().unwrap_or(0) >= 4 {
+                return true;
+            }
+            return host
+                .hub
+                .guests
+                .iter()
+                .find(|g| g.uuid == req)
+                .is_some_and(|g| g.permission >= 4);
+        }
+        return true;
+    }
+    if let Some(host) = &game.lan {
+        if let Some(req) = requester {
+            return host.hub.ops.get(&req).copied().unwrap_or(0) >= 4
+                || host
+                    .hub
+                    .guests
+                    .iter()
+                    .find(|g| g.uuid == req)
+                    .is_some_and(|g| g.permission >= 4);
+        }
+        if let Some(owner) = &host.owner {
+            return host.hub.ops.get(&owner.uuid).copied().unwrap_or(0) >= 4;
         }
     }
     false
@@ -3239,7 +3287,7 @@ pub fn rollback_slot_checkpoint_on_server(game: &mut Game<'_>, slot: &str) -> bo
 
 pub fn slot_dir(world_root: &Path, slot: &str) -> PathBuf {
     let clean = slot.trim();
-    if clean.is_empty() || clean == "default" {
+    if clean.is_empty() || clean == "default" || !is_valid_slot_name(clean) {
         world_root.join("rzero").join("checkpoint")
     } else {
         world_root.join("rzero").join("slots").join(clean)
@@ -3323,6 +3371,9 @@ pub fn collect_files_recursive(
 }
 
 pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot) -> bool {
+    if !is_valid_slot_name(slot.trim()) {
+        return false;
+    }
     let cp_dir = slot_dir(world_root, slot);
     if fs::create_dir_all(&cp_dir).is_err() {
         return false;
@@ -3454,6 +3505,9 @@ pub fn restore_disk_files_for_slot(world_root: &Path, slot: &str) -> usize {
 }
 
 pub fn restore_disk_files_for_slot_opts(world_root: &Path, slot: &str, force: bool) -> usize {
+    if !is_valid_slot_name(slot.trim()) {
+        return 0;
+    }
     let cp_dir = slot_dir(world_root, slot);
     let mut changed = 0;
     let cp_level = cp_dir.join("level.dat");
@@ -3505,6 +3559,9 @@ pub fn restore_disk_files_on_rollback(world_root: &Path) {
 }
 
 pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnapshot> {
+    if !is_valid_slot_name(slot.trim()) {
+        return None;
+    }
     let cp_dir = slot_dir(world_root, slot);
     let meta_file = cp_dir.join("meta.json");
     let meta_str = fs::read_to_string(meta_file).ok()?;
@@ -4054,13 +4111,15 @@ pub fn list_disk_slots(world_root: &Path) -> Vec<serde_json::Value> {
         }
     }
 
-    // 2. Именованные слоты
     let slots_base = world_root.join("rzero").join("slots");
     if let Ok(entries) = fs::read_dir(slots_base) {
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
+                if !is_valid_slot_name(&name) {
+                    continue;
+                }
                 let meta_f = p.join("meta.json");
                 if let Ok(s) = fs::read_to_string(&meta_f) {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&s) {
@@ -4080,7 +4139,11 @@ pub fn list_disk_slots(world_root: &Path) -> Vec<serde_json::Value> {
 }
 
 pub fn delete_disk_slot(world_root: &Path, slot: &str) -> bool {
-    let dir = slot_dir(world_root, slot);
+    let clean = slot.trim();
+    if clean == "default" || !is_valid_slot_name(clean) {
+        return false;
+    }
+    let dir = world_root.join("rzero").join("slots").join(clean);
     if dir.exists() {
         fs::remove_dir_all(dir).is_ok()
     } else {
@@ -4123,31 +4186,47 @@ pub fn execute_rzero_command(
         }
         "set" | "save" => {
             let slot = words.get(2).copied().unwrap_or("default");
-            create_slot_checkpoint_on_server(game, requester, slot);
-            with_state_mut(|st| st.current_slot = slot.to_owned());
-            tr_args("command.rzero.set.slot_success", &[slot])
+            if !is_valid_slot_name(slot) {
+                "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+            } else {
+                create_slot_checkpoint_on_server(game, requester, slot);
+                with_state_mut(|st| st.current_slot = slot.to_owned());
+                tr_args("command.rzero.set.slot_success", &[slot])
+            }
         }
         "load" | "rollback" => {
-            let slot = words.get(2).copied().unwrap_or("default");
-            if rollback_slot_checkpoint_on_server(game, slot) {
-                with_state_mut(|st| st.current_slot = slot.to_owned());
-                tr_args(
-                    "command.rzero.load.slot_success",
-                    &[slot, &game.world.game_time.to_string()],
-                )
+            if !has_level_4_permission(game, requester) {
+                tr("command.rzero.no_permission")
             } else {
-                tr_args("command.rzero.load.slot_failed", &[slot])
+                let slot = words.get(2).copied().unwrap_or("default");
+                if !is_valid_slot_name(slot) {
+                    "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+                } else if rollback_slot_checkpoint_on_server(game, slot) {
+                    with_state_mut(|st| st.current_slot = slot.to_owned());
+                    tr_args(
+                        "command.rzero.load.slot_success",
+                        &[slot, &game.world.game_time.to_string()],
+                    )
+                } else {
+                    tr_args("command.rzero.load.slot_failed", &[slot])
+                }
             }
         }
         "slot" | "slots" => handle_slot_subcommand(game, &words[2..], requester),
         "policy" => handle_policy_subcommand(game, &words[2..]),
         "metrics" => report_metrics_json(game),
         "rewind" => {
-            let slot = words.get(2).copied().unwrap_or("default");
-            if rollback_slot_checkpoint_on_server(game, slot) {
-                format!("[RZero] Immediate rewind executed to slot '{}'.", slot)
+            if !has_level_4_permission(game, requester) {
+                tr("command.rzero.no_permission")
             } else {
-                format!("[RZero] Rewind failed: Slot '{}' not found.", slot)
+                let slot = words.get(2).copied().unwrap_or("default");
+                if !is_valid_slot_name(slot) {
+                    "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+                } else if rollback_slot_checkpoint_on_server(game, slot) {
+                    format!("[RZero] Immediate rewind executed to slot '{}'.", slot)
+                } else {
+                    format!("[RZero] Rewind failed: Slot '{}' not found.", slot)
+                }
             }
         }
         "trigger" => handle_trigger_subcommand(game, &words[2..], requester),
@@ -4236,13 +4315,22 @@ pub fn handle_slot_subcommand(
         }
         "save" => {
             let name = args.get(1).copied().unwrap_or("default");
-            create_slot_checkpoint_on_server(game, requester, name);
-            with_state_mut(|st| st.current_slot = name.to_owned());
-            format!("[RZero] Saved timeline to slot '{}'.", name)
+            if !is_valid_slot_name(name) {
+                "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+            } else {
+                create_slot_checkpoint_on_server(game, requester, name);
+                with_state_mut(|st| st.current_slot = name.to_owned());
+                format!("[RZero] Saved timeline to slot '{}'.", name)
+            }
         }
         "load" => {
+            if !has_level_4_permission(game, requester) {
+                return tr("command.rzero.no_permission");
+            }
             let name = args.get(1).copied().unwrap_or("default");
-            if rollback_slot_checkpoint_on_server(game, name) {
+            if !is_valid_slot_name(name) {
+                "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+            } else if rollback_slot_checkpoint_on_server(game, name) {
                 with_state_mut(|st| st.current_slot = name.to_owned());
                 format!("[RZero] Rolled back to slot '{}'.", name)
             } else {
@@ -4251,13 +4339,22 @@ pub fn handle_slot_subcommand(
         }
         "select" => {
             let name = args.get(1).copied().unwrap_or("default");
-            with_state_mut(|st| st.current_slot = name.to_owned());
-            format!("[RZero] Active slot set to '{}'.", name)
+            if !is_valid_slot_name(name) {
+                "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+            } else {
+                with_state_mut(|st| st.current_slot = name.to_owned());
+                format!("[RZero] Active slot set to '{}'.", name)
+            }
         }
         "delete" => {
+            if !has_level_4_permission(game, requester) {
+                return tr("command.rzero.no_permission");
+            }
             let name = args.get(1).copied().unwrap_or("");
             if name.is_empty() || name == "default" {
                 "[RZero] Cannot delete default slot.".to_owned()
+            } else if !is_valid_slot_name(name) {
+                "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
             } else {
                 delete_slot_snapshot(name);
                 let deleted = delete_disk_slot(&game.world_root, name);
@@ -4355,8 +4452,13 @@ pub fn handle_trigger_subcommand(
 ) -> String {
     match args.first().copied().unwrap_or("rewind") {
         "rewind" => {
+            if !has_level_4_permission(game, requester) {
+                return tr("command.rzero.no_permission");
+            }
             let slot = args.get(1).copied().unwrap_or("default");
-            if rollback_slot_checkpoint_on_server(game, slot) {
+            if !is_valid_slot_name(slot) {
+                "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+            } else if rollback_slot_checkpoint_on_server(game, slot) {
                 format!("[RZero] Triggered rewind to slot '{}'.", slot)
             } else {
                 format!("[RZero] Trigger failed: Slot '{}' not found.", slot)
@@ -4364,8 +4466,12 @@ pub fn handle_trigger_subcommand(
         }
         "checkpoint" | "save" => {
             let slot = args.get(1).copied().unwrap_or("default");
-            create_slot_checkpoint_on_server(game, requester, slot);
-            format!("[RZero] Triggered checkpoint creation for slot '{}'.", slot)
+            if !is_valid_slot_name(slot) {
+                "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
+            } else {
+                create_slot_checkpoint_on_server(game, requester, slot);
+                format!("[RZero] Triggered checkpoint creation for slot '{}'.", slot)
+            }
         }
         _ => "[RZero] Usage: /rzero trigger <rewind|checkpoint> [slot]".to_owned(),
     }
@@ -4443,7 +4549,7 @@ pub fn report_status_json(game: &Game<'_>) -> String {
     });
 
     serde_json::to_string_pretty(&serde_json::json!({
-        "rzero_version": "0.1.0",
+        "rzero_version": MOD_VERSION,
         "has_checkpoint": has_cp,
         "current_slot": current_slot,
         "game_time": now,
@@ -4682,11 +4788,23 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
         || trimmed.starts_with("rzero rewind ")
         || trimmed.starts_with("rzero slot load ")
         || trimmed.starts_with("rzero trigger rewind");
+    let needs_level_4 = is_rollback
+        || trimmed == "rzero slot delete"
+        || trimmed.starts_with("rzero slot delete ")
+        || trimmed == "rzero slots delete"
+        || trimmed.starts_with("rzero slots delete ");
     let is_dev_cmd = trimmed == "rzero dev" || trimmed.starts_with("rzero dev ");
     let cmd_owned = trimmed.to_owned();
     if let Some(server) = &game.integrated {
         if let Some((allowed, lines)) = server.call(move |srv| {
-            if !is_dev_cmd && !has_cheat_permission(srv, None) {
+            let permitted = if is_dev_cmd {
+                true
+            } else if needs_level_4 {
+                has_level_4_permission(srv, None)
+            } else {
+                has_cheat_permission(srv, None)
+            };
+            if !permitted {
                 return (false, vec![tr("command.rzero.no_permission")]);
             }
             (true, execute_rzero_command(srv, None, &cmd_owned))
@@ -4702,7 +4820,14 @@ pub fn handle_client_command(game: &mut Game<'_>, command: &str, ran: &mut bool)
             }
         }
     } else {
-        if !is_dev_cmd && !has_cheat_permission(game, None) {
+        let permitted = if is_dev_cmd {
+            true
+        } else if needs_level_4 {
+            has_level_4_permission(game, None)
+        } else {
+            has_cheat_permission(game, None)
+        };
+        if !permitted {
             game.native_chat(&tr("command.rzero.no_permission"));
             return;
         }
@@ -4763,12 +4888,26 @@ pub fn intercept_guest_command(
     }
     let requester = host.hub.guest(conn).map(|g| g.uuid);
     let is_owner = requester.is_some_and(|u| host.owner.as_ref().is_some_and(|o| o.uuid == u));
+    let needs_level_4 = trimmed == "rzero load"
+        || trimmed.starts_with("rzero load ")
+        || trimmed == "rzero rollback"
+        || trimmed.starts_with("rzero rollback ")
+        || trimmed == "rzero rewind"
+        || trimmed.starts_with("rzero rewind ")
+        || trimmed == "rzero slot load"
+        || trimmed.starts_with("rzero slot load ")
+        || trimmed == "rzero slots load"
+        || trimmed.starts_with("rzero slots load ")
+        || trimmed == "rzero slot delete"
+        || trimmed.starts_with("rzero slot delete ")
+        || trimmed == "rzero slots delete"
+        || trimmed.starts_with("rzero slots delete ")
+        || trimmed.starts_with("rzero trigger rewind");
+    let min_op = if needs_level_4 { 4 } else { 2 };
     let has_op = host.hub.guest(conn).is_some_and(|g| {
-        g.permission >= 2 || host.hub.ops.get(&g.uuid).copied().unwrap_or(0) >= 2
+        g.permission >= min_op || host.hub.ops.get(&g.uuid).copied().unwrap_or(0) >= min_op
     });
-    let allowed = has_op
-        || (is_owner && game.allow_commands())
-        || (host.hub.config.guest_commands && game.allow_commands());
+    let allowed = has_op || (is_owner && game.allow_commands());
     if !allowed {
         if let Some(g) = host.hub.guest(conn) {
             let msg = tr("command.rzero.no_permission");
@@ -4799,7 +4938,7 @@ pub fn intercept_guest_command(
 pub fn register_native_mod(mods: &mut Vec<NativeMod>) {
     mods.push(NativeMod {
         id: MOD_ID.to_owned(),
-        title: "RZero 0.1.0".to_owned(),
+        title: format!("RZero {MOD_VERSION}"),
         description: tr("mod.rzero.description"),
         keys: vec![
             [
@@ -5299,7 +5438,7 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
     } else if key == load_key {
         if let Some(server) = &game.integrated {
             let res = server.call(|srv| {
-                if !has_cheat_permission(srv, None) {
+                if !has_level_4_permission(srv, None) {
                     return (false, tr("command.rzero.no_permission"));
                 }
                 if rollback_checkpoint_on_server(srv) {
@@ -5323,7 +5462,7 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
                 }
                 game.native_chat(&text);
             }
-        } else if !has_cheat_permission(game, None) {
+        } else if !has_level_4_permission(game, None) {
             game.native_chat(&tr("command.rzero.no_permission"));
         } else {
             game.close_container();

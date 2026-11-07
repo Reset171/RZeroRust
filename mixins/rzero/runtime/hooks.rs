@@ -41,7 +41,7 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
     } else if key == load_key {
         if let Some(server) = &game.integrated {
             let res = server.call(|srv| {
-                if !has_cheat_permission(srv, None) {
+                if !has_level_4_permission(srv, None) {
                     return (false, tr("command.rzero.no_permission"));
                 }
                 if rollback_checkpoint_on_server(srv) {
@@ -65,7 +65,7 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
                 }
                 game.native_chat(&text);
             }
-        } else if !has_cheat_permission(game, None) {
+        } else if !has_level_4_permission(game, None) {
             game.native_chat(&tr("command.rzero.no_permission"));
         } else {
             game.close_container();
