@@ -7,6 +7,7 @@ use std::{
 };
 
 pub const MOD_ID: &str = "rzero";
+pub const MOD_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RBD_SOUND_ID: &str = "rzero:rbd_sound";
 
 static LANG_MAPS: OnceLock<(HashMap<String, String>, HashMap<String, String>)> = OnceLock::new();
@@ -45,6 +46,14 @@ pub fn tr_args(key: &str, args: &[&str]) -> String {
     out
 }
 
+pub fn is_valid_slot_name(name: &str) -> bool {
+    let len = name.len();
+    (1..=32).contains(&len)
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
 pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
     if with_state(|st| st.dev_mode)
         || std::env::var_os("RZERO_DEV").is_some_and(|v| v == "1" || v == "true")
@@ -62,16 +71,12 @@ pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
             if host.hub.ops.get(&req).copied().unwrap_or(0) >= 2 {
                 return true;
             }
-            if host
+            return host
                 .hub
                 .guests
                 .iter()
                 .find(|g| g.uuid == req)
-                .is_some_and(|g| g.permission >= 2)
-            {
-                return true;
-            }
-            return host.hub.config.guest_commands;
+                .is_some_and(|g| g.permission >= 2);
         }
         return true;
     }
@@ -87,6 +92,49 @@ pub fn has_cheat_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
         }
         if let Some(owner) = &host.owner {
             return host.hub.ops.get(&owner.uuid).copied().unwrap_or(0) >= 2;
+        }
+    }
+    false
+}
+
+pub fn has_level_4_permission(game: &Game<'_>, requester: Option<u128>) -> bool {
+    if with_state(|st| st.dev_mode)
+        || std::env::var_os("RZERO_DEV").is_some_and(|v| v == "1" || v == "true")
+    {
+        return true;
+    }
+    if game.allow_commands() {
+        let Some(req) = requester else {
+            return true;
+        };
+        if let Some(host) = &game.lan {
+            if host.owner.as_ref().is_some_and(|o| o.uuid == req) {
+                return true;
+            }
+            if host.hub.ops.get(&req).copied().unwrap_or(0) >= 4 {
+                return true;
+            }
+            return host
+                .hub
+                .guests
+                .iter()
+                .find(|g| g.uuid == req)
+                .is_some_and(|g| g.permission >= 4);
+        }
+        return true;
+    }
+    if let Some(host) = &game.lan {
+        if let Some(req) = requester {
+            return host.hub.ops.get(&req).copied().unwrap_or(0) >= 4
+                || host
+                    .hub
+                    .guests
+                    .iter()
+                    .find(|g| g.uuid == req)
+                    .is_some_and(|g| g.permission >= 4);
+        }
+        if let Some(owner) = &host.owner {
+            return host.hub.ops.get(&owner.uuid).copied().unwrap_or(0) >= 4;
         }
     }
     false

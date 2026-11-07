@@ -19,7 +19,7 @@ use std::{
 
 pub fn slot_dir(world_root: &Path, slot: &str) -> PathBuf {
     let clean = slot.trim();
-    if clean.is_empty() || clean == "default" {
+    if clean.is_empty() || clean == "default" || !is_valid_slot_name(clean) {
         world_root.join("rzero").join("checkpoint")
     } else {
         world_root.join("rzero").join("slots").join(clean)
@@ -103,6 +103,9 @@ pub fn collect_files_recursive(
 }
 
 pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot) -> bool {
+    if !is_valid_slot_name(slot.trim()) {
+        return false;
+    }
     let cp_dir = slot_dir(world_root, slot);
     if fs::create_dir_all(&cp_dir).is_err() {
         return false;
@@ -234,6 +237,9 @@ pub fn restore_disk_files_for_slot(world_root: &Path, slot: &str) -> usize {
 }
 
 pub fn restore_disk_files_for_slot_opts(world_root: &Path, slot: &str, force: bool) -> usize {
+    if !is_valid_slot_name(slot.trim()) {
+        return 0;
+    }
     let cp_dir = slot_dir(world_root, slot);
     let mut changed = 0;
     let cp_level = cp_dir.join("level.dat");
@@ -285,6 +291,9 @@ pub fn restore_disk_files_on_rollback(world_root: &Path) {
 }
 
 pub fn load_slot_from_disk(world_root: &Path, slot: &str) -> Option<TimelineSnapshot> {
+    if !is_valid_slot_name(slot.trim()) {
+        return None;
+    }
     let cp_dir = slot_dir(world_root, slot);
     let meta_file = cp_dir.join("meta.json");
     let meta_str = fs::read_to_string(meta_file).ok()?;
@@ -834,13 +843,15 @@ pub fn list_disk_slots(world_root: &Path) -> Vec<serde_json::Value> {
         }
     }
 
-    // 2. Именованные слоты
     let slots_base = world_root.join("rzero").join("slots");
     if let Ok(entries) = fs::read_dir(slots_base) {
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
+                if !is_valid_slot_name(&name) {
+                    continue;
+                }
                 let meta_f = p.join("meta.json");
                 if let Ok(s) = fs::read_to_string(&meta_f) {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&s) {
@@ -860,7 +871,11 @@ pub fn list_disk_slots(world_root: &Path) -> Vec<serde_json::Value> {
 }
 
 pub fn delete_disk_slot(world_root: &Path, slot: &str) -> bool {
-    let dir = slot_dir(world_root, slot);
+    let clean = slot.trim();
+    if clean == "default" || !is_valid_slot_name(clean) {
+        return false;
+    }
+    let dir = world_root.join("rzero").join("slots").join(clean);
     if dir.exists() {
         fs::remove_dir_all(dir).is_ok()
     } else {
