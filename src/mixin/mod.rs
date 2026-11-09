@@ -19,7 +19,7 @@ pub struct NativeModEntry {
 pub fn on_native_mods(mods: &mut Vec<NativeModEntry>) {
     mods.push(NativeModEntry {
         id: MODID.to_owned(),
-        title: "RZero 0.1.1".to_owned(),
+        title: "RZero 0.1.2".to_owned(),
         description:
             "Return by Death. Completely rewind the timeline and the world state to your last checkpoint upon death."
                 .to_owned(),

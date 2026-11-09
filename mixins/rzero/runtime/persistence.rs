@@ -102,127 +102,192 @@ pub fn collect_files_recursive(
     }
 }
 
-pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot) -> bool {
-    if !is_valid_slot_name(slot.trim()) {
-        return false;
-    }
-    let cp_dir = slot_dir(world_root, slot);
-    if fs::create_dir_all(&cp_dir).is_err() {
-        return false;
-    }
-
-    // 1. Копируем level.dat
-    let level_dat = world_root.join("level.dat");
-    if level_dat.is_file() {
-        let target_level = cp_dir.join("level.dat");
-        if fs::copy(&level_dat, &target_level).is_ok() {
-            if let (Ok(m), Ok(f)) = (
-                level_dat.metadata(),
-                fs::File::options().write(true).open(&target_level),
-            ) {
-                if let Ok(mtime) = m.modified() {
-                    let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
-                }
-            }
+pub fn try_copy_file_preserve_mtime(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::copy(src, dst)?;
+    if let (Ok(m), Ok(f)) = (src.metadata(), fs::File::options().write(true).open(dst)) {
+        if let Ok(mtime) = m.modified() {
+            let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
         }
     }
+    Ok(())
+}
 
-    // 2. Копируем папку players
-    let players_dir = world_root.join("players");
-    let cp_players = cp_dir.join("players");
-    copy_dir_recursive(&players_dir, &cp_players);
+pub fn try_copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
+    if !src.exists() {
+        return Ok(0);
+    }
+    let mut copied = 0;
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let p = entry.path();
+        let target = dst.join(entry.file_name());
+        if p.is_dir() {
+            copied += try_copy_dir_recursive(&p, &target)?;
+        } else if p.is_file() {
+            try_copy_file_preserve_mtime(&p, &target)?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
 
-    // 3. Копируем папку data
-    let data_dir = world_root.join("data");
-    let cp_data = cp_dir.join("data");
-    copy_dir_recursive(&data_dir, &cp_data);
-
-    // 3.5. Копируем файлы измерений и регионов
-    let dims_dir = world_root.join("dimensions");
-    let cp_dims = cp_dir.join("dimensions");
-    copy_dir_recursive(&dims_dir, &cp_dims);
-
-    // 4. Сохраняем метаданные гостей и чекпоинта
-    let mut guests_json = Vec::new();
-    for g in snap.guests.values() {
-        guests_json.push(serde_json::json!({
-            "uuid": format!("{:032x}", g.uuid),
-            "dimension": g.dimension,
-            "position": g.position,
-            "velocity": [g.velocity.x, g.velocity.y, g.velocity.z],
-            "yaw": g.yaw,
-            "pitch": g.pitch,
-            "head_yaw": g.head_yaw,
-            "on_ground": g.on_ground,
-            "game_mode": g.game_mode,
-            "flying": g.flying,
-            "sprinting": g.sprinting,
-            "sneaking": g.sneaking,
-            "fall_flying": g.fall_flying,
-            "boarding_cooldown": g.boarding_cooldown,
-            "health": g.health,
-            "absorption": g.absorption,
-            "food": g.food,
-            "saturation": g.saturation,
-            "exhaustion": g.exhaustion,
-            "fire_ticks": g.fire_ticks,
-            "air": g.air,
-            "ticks_frozen": g.ticks_frozen,
-            "fall_distance": g.fall_distance,
-            "xp_level": g.xp_level,
-            "xp_progress": g.xp_progress,
-            "xp_total": g.xp_total,
-            "xp_seed": g.xp_seed,
-            "selected": g.selected,
-            "seen_credits": g.seen_credits,
-        }));
+pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot) -> bool {
+    let clean = slot.trim();
+    if !is_valid_slot_name(clean) {
+        return false;
+    }
+    let cp_dir = slot_dir(world_root, clean);
+    let Some(parent_dir) = cp_dir.parent() else {
+        return false;
+    };
+    if fs::create_dir_all(parent_dir).is_err() {
+        return false;
     }
 
-    let regions_list: Vec<String> = snap
-        .region_files
-        .iter()
-        .filter_map(|p| {
-            p.strip_prefix(world_root)
-                .ok()
-                .map(|rel| rel.to_string_lossy().to_string())
-        })
-        .collect();
+    let tag_name = if clean == "default" {
+        "checkpoint"
+    } else {
+        clean
+    };
+    let staging_dir = parent_dir.join(format!(".{tag_name}.staging"));
+    let backup_dir = parent_dir.join(format!(".{tag_name}.bak"));
 
-    let anchors_list: Vec<String> = snap
-        .anchor_ids
-        .iter()
-        .map(|u| format!("{:032x}", u))
-        .collect();
-
-    let mut loaded_chunks_json = serde_json::Map::new();
-    for (&dim, lsnap) in &snap.levels {
-        let mut coords: Vec<[i32; 2]> = lsnap.chunks.keys().map(|&(cx, cz)| [cx, cz]).collect();
-        coords.sort_unstable();
-        loaded_chunks_json.insert(dim.id().to_owned(), serde_json::json!(coords));
+    if staging_dir.exists() && fs::remove_dir_all(&staging_dir).is_err() {
+        return false;
     }
 
-    let meta = serde_json::json!({
-        "slot": slot,
-        "saved_at_unix": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
-        "game_time": snap.game_time,
-        "day_time": snap.day_time,
-        "difficulty": snap.difficulty,
-        "difficulty_locked": snap.difficulty_locked,
-        "clock_rate": snap.clock_rate,
-        "clock_frozen": snap.clock_frozen,
-        "time_rate": snap.time_rate,
-        "world_spawn": snap.world_spawn,
-        "world_spawn_angle": snap.world_spawn_angle,
-        "next_entity": snap.next_entity,
-        "policy": snap.policy.to_json(),
-        "anchor_ids": anchors_list,
-        "region_files": regions_list,
-        "loaded_chunks": loaded_chunks_json,
-        "guests": guests_json,
-    });
+    let write_stage = (|| -> std::io::Result<()> {
+        fs::create_dir_all(&staging_dir)?;
 
-    if let Ok(json_str) = serde_json::to_string_pretty(&meta) {
-        let _ = fs::write(cp_dir.join("meta.json"), json_str);
+        let level_dat = world_root.join("level.dat");
+        if !level_dat.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "level.dat missing",
+            ));
+        }
+        try_copy_file_preserve_mtime(&level_dat, &staging_dir.join("level.dat"))?;
+
+        try_copy_dir_recursive(&world_root.join("players"), &staging_dir.join("players"))?;
+        try_copy_dir_recursive(&world_root.join("data"), &staging_dir.join("data"))?;
+        try_copy_dir_recursive(
+            &world_root.join("dimensions"),
+            &staging_dir.join("dimensions"),
+        )?;
+
+        let mut guests_json = Vec::new();
+        for g in snap.guests.values() {
+            guests_json.push(serde_json::json!({
+                "uuid": format!("{:032x}", g.uuid),
+                "dimension": g.dimension,
+                "position": g.position,
+                "velocity": [g.velocity.x, g.velocity.y, g.velocity.z],
+                "yaw": g.yaw,
+                "pitch": g.pitch,
+                "head_yaw": g.head_yaw,
+                "on_ground": g.on_ground,
+                "game_mode": g.game_mode,
+                "flying": g.flying,
+                "sprinting": g.sprinting,
+                "sneaking": g.sneaking,
+                "fall_flying": g.fall_flying,
+                "boarding_cooldown": g.boarding_cooldown,
+                "health": g.health,
+                "absorption": g.absorption,
+                "food": g.food,
+                "saturation": g.saturation,
+                "exhaustion": g.exhaustion,
+                "fire_ticks": g.fire_ticks,
+                "air": g.air,
+                "ticks_frozen": g.ticks_frozen,
+                "fall_distance": g.fall_distance,
+                "xp_level": g.xp_level,
+                "xp_progress": g.xp_progress,
+                "xp_total": g.xp_total,
+                "xp_seed": g.xp_seed,
+                "selected": g.selected,
+                "seen_credits": g.seen_credits,
+            }));
+        }
+
+        let regions_list: Vec<String> = snap
+            .region_files
+            .iter()
+            .filter_map(|p| {
+                p.strip_prefix(world_root)
+                    .ok()
+                    .map(|rel| rel.to_string_lossy().to_string())
+            })
+            .collect();
+
+        let anchors_list: Vec<String> = snap
+            .anchor_ids
+            .iter()
+            .map(|u| format!("{:032x}", u))
+            .collect();
+
+        let mut loaded_chunks_json = serde_json::Map::new();
+        for (&dim, lsnap) in &snap.levels {
+            let mut coords: Vec<[i32; 2]> =
+                lsnap.chunks.keys().map(|&(cx, cz)| [cx, cz]).collect();
+            coords.sort_unstable();
+            loaded_chunks_json.insert(dim.id().to_owned(), serde_json::json!(coords));
+        }
+
+        let meta = serde_json::json!({
+            "slot": clean,
+            "saved_at_unix": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+            "game_time": snap.game_time,
+            "day_time": snap.day_time,
+            "difficulty": snap.difficulty,
+            "difficulty_locked": snap.difficulty_locked,
+            "clock_rate": snap.clock_rate,
+            "clock_frozen": snap.clock_frozen,
+            "time_rate": snap.time_rate,
+            "world_spawn": snap.world_spawn,
+            "world_spawn_angle": snap.world_spawn_angle,
+            "next_entity": snap.next_entity,
+            "policy": snap.policy.to_json(),
+            "anchor_ids": anchors_list,
+            "region_files": regions_list,
+            "loaded_chunks": loaded_chunks_json,
+            "guests": guests_json,
+        });
+
+        let json_str = serde_json::to_string_pretty(&meta).map_err(std::io::Error::other)?;
+        let mut meta_file = fs::File::create(staging_dir.join("meta.json"))?;
+        meta_file.write_all(json_str.as_bytes())?;
+        meta_file.sync_all()?;
+        Ok(())
+    })();
+
+    if write_stage.is_err() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    if backup_dir.exists() && fs::remove_dir_all(&backup_dir).is_err() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    let had_existing = cp_dir.exists();
+    if had_existing && fs::rename(&cp_dir, &backup_dir).is_err() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    if fs::rename(&staging_dir, &cp_dir).is_err() {
+        if had_existing {
+            let _ = fs::rename(&backup_dir, &cp_dir);
+        }
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    if had_existing {
+        let _ = fs::remove_dir_all(&backup_dir);
     }
 
     true

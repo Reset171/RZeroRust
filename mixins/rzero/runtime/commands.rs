@@ -31,10 +31,11 @@ pub fn execute_rzero_command(
             let slot = words.get(2).copied().unwrap_or("default");
             if !is_valid_slot_name(slot) {
                 "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
-            } else {
-                create_slot_checkpoint_on_server(game, requester, slot);
+            } else if create_slot_checkpoint_on_server(game, requester, slot) {
                 with_state_mut(|st| st.current_slot = slot.to_owned());
                 tr_args("command.rzero.set.slot_success", &[slot])
+            } else {
+                tr_args("command.rzero.set.slot_failed", &[slot])
             }
         }
         "load" | "rollback" => {
@@ -160,10 +161,11 @@ pub fn handle_slot_subcommand(
             let name = args.get(1).copied().unwrap_or("default");
             if !is_valid_slot_name(name) {
                 "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
-            } else {
-                create_slot_checkpoint_on_server(game, requester, name);
+            } else if create_slot_checkpoint_on_server(game, requester, name) {
                 with_state_mut(|st| st.current_slot = name.to_owned());
                 format!("[RZero] Saved timeline to slot '{}'.", name)
+            } else {
+                tr_args("command.rzero.set.slot_failed", &[name])
             }
         }
         "load" => {
@@ -311,9 +313,10 @@ pub fn handle_trigger_subcommand(
             let slot = args.get(1).copied().unwrap_or("default");
             if !is_valid_slot_name(slot) {
                 "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
-            } else {
-                create_slot_checkpoint_on_server(game, requester, slot);
+            } else if create_slot_checkpoint_on_server(game, requester, slot) {
                 format!("[RZero] Triggered checkpoint creation for slot '{}'.", slot)
+            } else {
+                tr_args("command.rzero.set.slot_failed", &[slot])
             }
         }
         _ => "[RZero] Usage: /rzero trigger <rewind|checkpoint> [slot]".to_owned(),

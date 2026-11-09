@@ -70,8 +70,8 @@ use std::{
     time::Instant,
 };
 
-pub const LANG_EN_US_JSON: &str = "{\n  \"key.categories.rzero\": \"RZero\",\n  \"key.rzero.save\": \"Create Checkpoint\",\n  \"key.rzero.load\": \"Return to Checkpoint\",\n  \"key.rzero.anchor_menu\": \"Key Player Menu\",\n  \"gui.rzero.anchor.title\": \"Key Player Settings\",\n  \"gui.rzero.anchor.mode\": \"Mode\",\n  \"gui.rzero.anchor.mode.fixed\": \"Single Player\",\n  \"gui.rzero.anchor.mode.multi\": \"Multiple Players\",\n  \"gui.rzero.anchor.mode.everyone\": \"All Players\",\n  \"gui.rzero.anchor.mode.rotating\": \"Rotation\",\n  \"gui.rzero.anchor.cooldown\": \"Rollback Cooldown\",\n  \"gui.rzero.anchor.cooldown.label\": \"Rollback Cooldown (in seconds):\",\n  \"gui.rzero.anchor.cooldown.disabled\": \"Rollback Cooldown: Off\",\n  \"gui.rzero.anchor.rotation\": \"Rotation Interval\",\n  \"gui.rzero.anchor.rotation.label\": \"Rotation Interval (in seconds):\",\n  \"gui.rzero.anchor.apply\": \"Apply\",\n  \"gui.rzero.anchor.applied\": \"[RZero] Create or return to a checkpoint to apply settings.\",\n  \"gui.rzero.anchor.no_permission\": \"[RZero] You do not have permission to manage key players.\",\n  \"gui.rzero.anchor.note.everyone\": \"All players on the server act as key players.\",\n  \"gui.rzero.anchor.note.rotating\": \"Key player changes cyclically among online players.\",\n  \"gamerule.category.rzero\": \"RZero\",\n  \"gamerule.rzeroAutoSave\": \"Auto-Save\",\n  \"gamerule.rzeroAutoSave.description\": \"Automatically creates checkpoints.\",\n  \"gamerule.rzeroFixedInterval\": \"Interval\",\n  \"gamerule.rzeroFixedInterval.description\": \"Fixed interval between auto-saves (in seconds).\",\n  \"gamerule.rzeroUseRandomInterval\": \"Random Interval\",\n  \"gamerule.rzeroUseRandomInterval.description\": \"Uses a random time between Minimum and Maximum intervals.\",\n  \"gamerule.rzeroRandomIntervalMin\": \"Minimum Interval\",\n  \"gamerule.rzeroRandomIntervalMin.description\": \"Minimum interval between auto-saves (in seconds).\",\n  \"gamerule.rzeroRandomIntervalMax\": \"Maximum Interval\",\n  \"gamerule.rzeroRandomIntervalMax.description\": \"Maximum interval between auto-saves (in seconds).\",\n  \"gamerule.rzeroPlayRollbackSound\": \"Rollback Sound on Death\",\n  \"gamerule.rzeroPlayRollbackSound.description\": \"Play sound on rollback.\",\n  \"gamerule.rzeroUseAdaptiveMode\": \"Adaptive Save\",\n  \"gamerule.rzeroUseAdaptiveMode.description\": \"Automatically creates checkpoints prior to danger and after combat.\",\n  \"gamerule.rzeroAdaptiveInterval\": \"Tranquil Interval (in seconds)\",\n  \"gamerule.rzeroAdaptiveInterval.description\": \"Required safety period before auto-save in Adaptive Save mode (in seconds).\",\n  \"command.rzero.set.success\": \"[RZero] Checkpoint created successfully.\",\n  \"command.rzero.anchor.hint.newCheckpoint\": \"[RZero] Run /rzero set to update key player configuration for the current checkpoint.\",\n  \"command.rzero.anchor.mode\": \"[RZero] Key player mode: %s\",\n  \"command.rzero.anchor.cooldown\": \"[RZero] Rollback cooldown: %s (in seconds)\",\n  \"command.rzero.anchor.cooldown.off\": \"[RZero] Rollback cooldown disabled: every key player death rewinds the world.\",\n  \"command.rzero.anchor.status\": \"[RZero] Key player mode: %s | rollback cooldown: %s | active key players: %s\",\n  \"command.rzero.anchor.mode.fixed\": \"Single Player (%s)\",\n  \"command.rzero.anchor.mode.multi\": \"Multiple Key Players (%s pinned)\",\n  \"command.rzero.anchor.mode.everyone\": \"All Players\",\n  \"command.rzero.anchor.mode.rotating\": \"Rotation (%s in seconds)\",\n  \"command.rzero.anchor.cooldown.format\": \"%s s (ready in %s s)\",\n  \"command.rzero.anchor.cooldown.disabled\": \"disabled\",\n  \"command.rzero.anchor.none\": \"(none)\",\n  \"config.rzero.title\": \"RZero Configuration\",\n  \"config.rzero.uiMode\": \"Settings Mode\",\n  \"config.rzero.uiMode.basic\": \"Standard\",\n  \"config.rzero.uiMode.expert\": \"Advanced\",\n  \"config.rzero.uiMode.tooltip\": \"Hides advanced determinism and synchronization parameters.\",\n  \"config.rzero.category.general\": \"General\",\n  \"config.rzero.category.adaptive\": \"Adaptive Save\",\n  \"config.rzero.category.anchor\": \"Key Player\",\n  \"config.rzero.category.policy\": \"Rollback\",\n  \"config.rzero.category.determinism\": \"Determinism\",\n  \"config.rzero.category.clientRestore\": \"Client\",\n  \"config.rzero.adaptive_minSaveGapSeconds\": \"Min. Interval Between Saves (in seconds)\",\n  \"config.rzero.adaptive_relaxTimeSeconds\": \"Post-Combat Tranquil Time (in seconds)\",\n  \"config.rzero.adaptive_postCombatSavePercent\": \"Post-Combat Save Chance (%)\",\n  \"config.rzero.adaptive_saveOnBossDefeat\": \"Checkpoint on Boss Defeat\",\n  \"config.rzero.checkpointPolicy_rollback_players_preserveNewPlayerInventory\": \"Do Not Reset New Players' Inventory\",\n  \"config.rzero.checkpointPolicy_rollback_entities_droppedItems\": \"Dropped Items\",\n  \"config.rzero.checkpointPolicy_rollback_entities_experienceOrbs\": \"Experience Orbs\",\n  \"config.rzero.clientRestore_displayChatNotifications\": \"Chat Notifications\",\n  \"config.rzero.clientRestore_meshCacheEnabled\": \"Geometry Cache (GPU)\",\n  \"config.rzero.clientRestore_meshCacheEnabled.tooltip\": \"Stores chunk meshes in VRAM for instant rendering.\",\n  \"config.rzero.clientRestore_meshCacheRadius\": \"Geometry Cache Radius\",\n  \"config.rzero.clientRestore_meshCacheRadius.tooltip\": \"Chunk mesh caching radius. Increases VRAM usage.\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb\": \"Geometry Cache Budget (MB)\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb.tooltip\": \"Maximum video memory allocated for geometry buffers.\",\n  \"config.rzero.anchorMode\": \"Key Player Mode\",\n  \"config.rzero.rotationSeconds\": \"Key Player Rotation (in seconds)\",\n  \"config.rzero.rollbackCooldownSeconds\": \"Key Player Rollback Cooldown (in seconds)\",\n  \"config.rzero.rzerochashEnabled\": \"Chunk Cache\",\n  \"config.rzero.rzerochashEnabled.tooltip\": \"Caches chunks and lighting on the client side during rollback.\",\n  \"config.rzero.checkpointPolicy_rollback_blocks\": \"Blocks\",\n  \"config.rzero.checkpointPolicy_rollback_blockEntities\": \"Block Entities\",\n  \"config.rzero.checkpointPolicy_rollback_blockTicks\": \"Block Ticks\",\n  \"config.rzero.checkpointPolicy_rollback_fluidTicks\": \"Fluid Ticks\",\n  \"config.rzero.checkpointPolicy_rollback_blockEvents\": \"Block Events\",\n  \"config.rzero.checkpointPolicy_rollback_pois\": \"Villager Points of Interest (POI)\",\n  \"config.rzero.checkpointPolicy_rollback_biomes\": \"Biomes\",\n  \"config.rzero.checkpointPolicy_rollback_players_position\": \"Player Coordinates\",\n  \"config.rzero.checkpointPolicy_rollback_players_motion\": \"Player Motion\",\n  \"config.rzero.checkpointPolicy_rollback_players_health\": \"Player Health\",\n  \"config.rzero.checkpointPolicy_rollback_players_hunger\": \"Player Hunger\",\n  \"config.rzero.checkpointPolicy_rollback_players_experience\": \"Player Experience\",\n  \"config.rzero.checkpointPolicy_rollback_players_inventory\": \"Player Inventory\",\n  \"config.rzero.checkpointPolicy_rollback_players_enderChest\": \"Ender Chest\",\n  \"config.rzero.checkpointPolicy_rollback_players_potionEffects\": \"Potion Effects\",\n  \"config.rzero.checkpointPolicy_rollback_players_cooldowns\": \"Item Cooldowns\",\n  \"config.rzero.checkpointPolicy_rollback_players_openMenu\": \"Open Menu\",\n  \"config.rzero.checkpointPolicy_rollback_players_abilities\": \"Abilities\",\n  \"config.rzero.checkpointPolicy_rollback_players_recipeBook\": \"Recipe Book\",\n  \"config.rzero.checkpointPolicy_rollback_players_spawnPoint\": \"Spawn Point\",\n  \"config.rzero.checkpointPolicy_rollback_players_score\": \"Score\",\n  \"config.rzero.checkpointPolicy_rollback_players_stats\": \"Player Statistics\",\n  \"config.rzero.checkpointPolicy_rollback_entities_presence\": \"Entity Presence\",\n  \"config.rzero.checkpointPolicy_rollback_entities_entityId\": \"Entity ID\",\n  \"config.rzero.checkpointPolicy_rollback_entities_tickCount\": \"Tick Counter\",\n  \"config.rzero.checkpointPolicy_rollback_entities_rngState\": \"Entity RNG\",\n  \"config.rzero.checkpointPolicy_rollback_entities_livingTimers\": \"Living Entity Timers\",\n  \"config.rzero.checkpointPolicy_rollback_entities_target\": \"Entity Target\",\n  \"config.rzero.checkpointPolicy_rollback_entities_navigation\": \"Mob Pathfinding & Navigation\",\n  \"config.rzero.checkpointPolicy_rollback_entities_brainRam\": \"Brain RAM\",\n  \"config.rzero.checkpointPolicy_rollback_entities_passengers\": \"Passengers\",\n  \"config.rzero.checkpointPolicy_rollback_entities_mobRamCache\": \"Mob RAM Cache\",\n  \"config.rzero.checkpointPolicy_rollback_world_time\": \"World Time\",\n  \"config.rzero.checkpointPolicy_rollback_world_weather\": \"Weather\",\n  \"config.rzero.checkpointPolicy_rollback_world_raids\": \"Raids\",\n  \"config.rzero.checkpointPolicy_rollback_world_dragonFight\": \"Ender Dragon Fight\",\n  \"config.rzero.checkpointPolicy_rollback_world_scoreboard\": \"Scoreboards\",\n  \"config.rzero.checkpointPolicy_rollback_world_levelRng\": \"Dimension RNG\",\n  \"config.rzero.checkpointPolicy_rollback_world_difficulty\": \"World Difficulty\",\n  \"config.rzero.checkpointPolicy_rollback_world_worldSpawn\": \"World Spawn Point\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_bossbars\": \"Bossbars\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_forcedChunks\": \"Loaded Chunks\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_worldBorder\": \"World Border\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_gameRules\": \"Game Rules\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_randomSequences\": \"Random Sequences\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_savedData\": \"Saved World Data\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_serverTickCount\": \"Server Tick Counter\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_shufflingCounter\": \"Shuffling Counter\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_scheduledEvents\": \"Scheduled Functions\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_tickRate\": \"Tick Rate & Freeze\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_enabled\": \"Deterministic Natural Spawning\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_useSpawnEngine\": \"Deterministic Spawn Engine\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning\": \"Discrete Chunk Spawning\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning.tooltip\": \"Locks mob spawning strictly to the chunk grid and epochs, removing variance from player micro-movements.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp\": \"Animal Spawn Synchronization (Experimental)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp.tooltip\": \"Replays missed animal spawn cycles upon entering the chunk.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp\": \"Monster Spawn Synchronization\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp.tooltip\": \"Replays missed monster spawn cycles upon entering the chunk.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_stampSpawnOrigin\": \"Spawn Origin Stamp\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_brainRng\": \"Mob AI RNG (Brain RNG)\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_behaviorDurationRng\": \"Deterministic Behavior Duration\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_shufflingListRng\": \"Deterministic AI Task Shuffling\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_memoryIterationOrder\": \"Memory Iteration Order\",\n  \"config.rzero.checkpointPolicy_determinism_loot_containerLoot\": \"Deterministic Container Loot\",\n  \"config.rzero.checkpointPolicy_determinism_loot_mobDeathDrops\": \"Deterministic Mob Drops\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSeed\": \"Deterministic Raid Seed\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSpawnPosition\": \"Deterministic Raid Spawn Position\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_wanderingTrader\": \"Deterministic Wandering Trader Spawn\",\n  \"config.rzero.checkpointPolicy_determinism_combat_knockbackRng\": \"Knockback RNG\",\n  \"config.rzero.clientRestore_cameraType\": \"Camera Perspective (1st / 3rd person)\",\n  \"config.rzero.clientRestore_stopFutureSounds\": \"Stop Future Sounds\",\n  \"config.rzero.clientRestore_clearParticles\": \"Clear Particles\",\n  \"config.rzero.clientRestore_restoreInventoryScreen\": \"Restore Open Inventory on Rollback\",\n  \"config.rzero.clientRestore_restoreCreativeTab\": \"Restore Creative Tab\",\n  \"config.rzero.clientRestore_restoreRecipeBookTab\": \"Restore Recipe Book Category\",\n  \"config.rzero.clientRestore_restoreSearchText\": \"Restore Search Query in Menu\",\n  \"config.rzero.clientRestore_resetHurtAnimation\": \"Reset Damage Animation\",\n  \"config.rzero.clientRestore_snapPlayerRotation\": \"Player Look Direction Lock\",\n  \"config.rzero.clientRestore_skipEquipAnimation\": \"Skip Hand Item Equip Animation\",\n  \"config.rzero.clientRestore_restoreChatState\": \"Restore Chat State\",\n  \"config.rzero.clientRestore_suppressTerrainLoadingScreen\": \"Hide Terrain Loading Screen\",\n  \"config.rzero.anchorMode.fixed\": \"Single Player\",\n  \"config.rzero.anchorMode.multi\": \"Multiple Key Players\",\n  \"config.rzero.anchorMode.everyone\": \"All Players\",\n  \"config.rzero.anchorMode.rotating\": \"Rotation\",\n  \"config.rzero.subcategory.rollback\": \"Blocks\",\n  \"config.rzero.subcategory.rollback_players\": \"Players\",\n  \"config.rzero.subcategory.rollback_entities\": \"Entities\",\n  \"config.rzero.subcategory.rollback_world\": \"World\",\n  \"config.rzero.subcategory.rollback_world_serverglobals\": \"Server Globals\",\n  \"config.rzero.subcategory.determinism_naturalspawn\": \"Natural Spawn\",\n  \"config.rzero.subcategory.determinism_mobai\": \"Mob AI\",\n  \"config.rzero.subcategory.determinism_loot\": \"Loot Generation\",\n  \"config.rzero.subcategory.determinism_spawns\": \"Raids & Spawns\",\n  \"config.rzero.subcategory.determinism_combat\": \"Combat Determinism\",\n  \"config.rzero.logsEnabled\": \"Enable Logs\",\n  \"config.rzero.logsEnabled.tooltip\": \"Print diagnostic info (checkpoint/rollback/cache progress, benchmark trees) to the console.\",\n  \"mod.rzero.description\": \"Return by Death. Completely rewind the timeline and the world state to your last checkpoint upon death.\",\n  \"ui.rzero.on\": \"ON\",\n  \"ui.rzero.off\": \"OFF\",\n  \"ui.rzero.auto_save\": \"Auto-Save: %s\",\n  \"ui.rzero.adaptive_save\": \"Adaptive Save: %s\",\n  \"ui.rzero.interval\": \"Auto-Save Interval: %s s\",\n  \"ui.rzero.anchor_mode\": \"Key Player Mode: %s\",\n  \"ui.rzero.cooldown_off\": \"Rollback Cooldown: Off\",\n  \"ui.rzero.cooldown\": \"Rollback Cooldown: %s s\",\n  \"ui.rzero.boss_save\": \"Checkpoint on Boss Defeat: %s\",\n  \"ui.rzero.logs\": \"Logs: %s\",\n  \"ui.rzero.f3_hitboxes\": \"F3 Loop Hitboxes: %s\",\n  \"command.rzero.no_permission\": \"[RZero] You do not have permission (enable cheats for manual control).\",\n  \"command.rzero.load.success\": \"[RZero] Timeline rolled back to checkpoint (tick=%s).\",\n  \"command.rzero.load.failed\": \"[RZero] Rollback aborted: No timeline origin found.\",\n  \"command.rzero.set.slot_success\": \"[RZero] Checkpoint saved to slot '%s' successfully.\",\n  \"command.rzero.load.slot_success\": \"[RZero] Timeline rolled back to slot '%s' (tick=%s).\",\n  \"command.rzero.load.slot_failed\": \"[RZero] Rollback aborted: No timeline origin found for slot '%s'.\",\n  \"command.rzero.f3.status\": \"[RZero] F3 loop hitboxes: %s\",\n  \"ui.rzero.dev_mode\": \"Developer Mode: %s\",\n  \"command.rzero.dev.status\": \"[RZero] Developer Mode: %s\"\n}";
-pub const LANG_RU_RU_JSON: &str = "{\n  \"key.categories.rzero\": \"RZero\",\n  \"key.rzero.save\": \"Создать точку сохранения\",\n  \"key.rzero.load\": \"Вернуться к точке сохранения\",\n  \"key.rzero.anchor_menu\": \"Меню ключевых игроков\",\n  \"gui.rzero.anchor.title\": \"Настройка ключевых игроков\",\n  \"gui.rzero.anchor.mode\": \"Режим\",\n  \"gui.rzero.anchor.mode.fixed\": \"Один игрок\",\n  \"gui.rzero.anchor.mode.multi\": \"Несколько игроков\",\n  \"gui.rzero.anchor.mode.everyone\": \"Все игроки\",\n  \"gui.rzero.anchor.mode.rotating\": \"Ротация\",\n  \"gui.rzero.anchor.cooldown\": \"Перезарядка отката\",\n  \"gui.rzero.anchor.cooldown.label\": \"Перезарядка отката (в секундах):\",\n  \"gui.rzero.anchor.cooldown.disabled\": \"Перезарядка отката: Выкл\",\n  \"gui.rzero.anchor.rotation\": \"Интервал ротации\",\n  \"gui.rzero.anchor.rotation.label\": \"Интервал ротации (в секундах):\",\n  \"gui.rzero.anchor.apply\": \"Применить\",\n  \"gui.rzero.anchor.applied\": \"[RZero] Создайте точку сохранения или вернитесь к ней для применения настроек.\",\n  \"gui.rzero.anchor.no_permission\": \"[RZero] У вас нет прав оператора для управления ключевыми игроками.\",\n  \"gui.rzero.anchor.note.everyone\": \"Все игроки на сервере являются ключевыми.\",\n  \"gui.rzero.anchor.note.rotating\": \"Ключевой игрок циклически меняется среди игроков на сервере.\",\n  \"gamerule.category.rzero\": \"RZero\",\n  \"gamerule.rzeroAutoSave\": \"Автосохранение\",\n  \"gamerule.rzeroAutoSave.description\": \"Автоматически создает точки сохранения.\",\n  \"gamerule.rzeroFixedInterval\": \"Интервал\",\n  \"gamerule.rzeroFixedInterval.description\": \"Фиксированное время между автосохранениями (в секундах).\",\n  \"gamerule.rzeroUseRandomInterval\": \"Случайный интервал\",\n  \"gamerule.rzeroUseRandomInterval.description\": \"Использовать случайное время между Минимальным и Максимальным интервалами.\",\n  \"gamerule.rzeroRandomIntervalMin\": \"Минимальный интервал\",\n  \"gamerule.rzeroRandomIntervalMin.description\": \"Минимальное время между сохранениями (в секундах).\",\n  \"gamerule.rzeroRandomIntervalMax\": \"Максимальный интервал\",\n  \"gamerule.rzeroRandomIntervalMax.description\": \"Максимальное время между сохранениями (в секундах).\",\n  \"gamerule.rzeroPlayRollbackSound\": \"Звук отката при гибели\",\n  \"gamerule.rzeroPlayRollbackSound.description\": \"Воспроизведение звука при откате.\",\n  \"gamerule.rzeroUseAdaptiveMode\": \"Адаптивное сохранение\",\n  \"gamerule.rzeroUseAdaptiveMode.description\": \"Автоматически создает точки сохранения перед опасными ситуациями и после победы в бою.\",\n  \"gamerule.rzeroAdaptiveInterval\": \"Интервал затишья (в секундах)\",\n  \"gamerule.rzeroAdaptiveInterval.description\": \"Необходимое время безопасности перед автосохранением в Адаптивном режиме (в секундах).\",\n  \"command.rzero.set.success\": \"[RZero] Точка сохранения успешно создана.\",\n  \"command.rzero.anchor.hint.newCheckpoint\": \"[RZero] Введите /rzero set, чтобы обновить конфигурацию ключевых игроков в текущей точке сохранения.\",\n  \"command.rzero.anchor.mode\": \"[RZero] Режим ключевого игрока: %s\",\n  \"command.rzero.anchor.cooldown\": \"[RZero] Перезарядка отката: %s (в секундах)\",\n  \"command.rzero.anchor.cooldown.off\": \"[RZero] Перезарядка отката отключена: каждая гибель ключевого игрока откатывает мир.\",\n  \"command.rzero.anchor.status\": \"[RZero] Режим ключевого игрока: %s | перезарядка отката: %s | активные ключевые игроки: %s\",\n  \"command.rzero.anchor.mode.fixed\": \"Один игрок (%s)\",\n  \"command.rzero.anchor.mode.multi\": \"Несколько ключевых игроков (%s закреплено)\",\n  \"command.rzero.anchor.mode.everyone\": \"Все игроки\",\n  \"command.rzero.anchor.mode.rotating\": \"Циклическая смена (%s в секундах)\",\n  \"command.rzero.anchor.cooldown.format\": \"%s сек (готов через %s сек)\",\n  \"command.rzero.anchor.cooldown.disabled\": \"отключена\",\n  \"command.rzero.anchor.none\": \"(отсутствуют)\",\n  \"config.rzero.title\": \"Настройки RZero\",\n  \"config.rzero.uiMode\": \"Отображение настроек\",\n  \"config.rzero.uiMode.basic\": \"Стандартные\",\n  \"config.rzero.uiMode.expert\": \"Расширенные\",\n  \"config.rzero.uiMode.tooltip\": \"Скрывает расширенные параметры детерминизма и синхронизации.\",\n  \"config.rzero.category.general\": \"Общие\",\n  \"config.rzero.category.adaptive\": \"Адаптивное сохранение\",\n  \"config.rzero.category.anchor\": \"Ключевой игрок\",\n  \"config.rzero.category.policy\": \"Откат\",\n  \"config.rzero.category.determinism\": \"Детерминизм\",\n  \"config.rzero.category.clientRestore\": \"Клиент\",\n  \"config.rzero.adaptive_minSaveGapSeconds\": \"Мин. интервал между сохранениями (в секундах)\",\n  \"config.rzero.adaptive_relaxTimeSeconds\": \"Время затишья после боя (в секундах)\",\n  \"config.rzero.adaptive_postCombatSavePercent\": \"Шанс сохранения после боя (%)\",\n  \"config.rzero.adaptive_saveOnBossDefeat\": \"Точка сохранения при победе над боссом\",\n  \"config.rzero.checkpointPolicy_rollback_players_preserveNewPlayerInventory\": \"Не сбрасывать инвентарь новым игрокам\",\n  \"config.rzero.checkpointPolicy_rollback_entities_droppedItems\": \"Выпавшие предметы\",\n  \"config.rzero.checkpointPolicy_rollback_entities_experienceOrbs\": \"Сферы опыта\",\n  \"config.rzero.clientRestore_displayChatNotifications\": \"Сообщения в чате\",\n  \"config.rzero.clientRestore_meshCacheEnabled\": \"Кеш геометрии\",\n  \"config.rzero.clientRestore_meshCacheEnabled.tooltip\": \"Хранит полигоны чанков в VRAM для моментальной отрисовки.\",\n  \"config.rzero.clientRestore_meshCacheRadius\": \"Радиус кеша геометрии\",\n  \"config.rzero.clientRestore_meshCacheRadius.tooltip\": \"Радиус кеширования сетки чанков. Увеличивает расход видеопамяти.\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb\": \"Лимит кеша геометрии (МБ)\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb.tooltip\": \"Максимальный объем видеопамяти под буферы геометрии.\",\n  \"config.rzero.anchorMode\": \"Режим ключевого игрока\",\n  \"config.rzero.rotationSeconds\": \"Смена ключевого игрока (в секундах)\",\n  \"config.rzero.rollbackCooldownSeconds\": \"Перезарядка отката ключевого игрока (в секундах)\",\n  \"config.rzero.rzerochashEnabled\": \"Кеш чанков\",\n  \"config.rzero.rzerochashEnabled.tooltip\": \"Кеширует чанки и освещение на стороне клиента во время отката.\",\n  \"config.rzero.checkpointPolicy_rollback_blocks\": \"Блоки\",\n  \"config.rzero.checkpointPolicy_rollback_blockEntities\": \"Блок-сущности (сундуки, печи и др.)\",\n  \"config.rzero.checkpointPolicy_rollback_blockTicks\": \"Тики блоков\",\n  \"config.rzero.checkpointPolicy_rollback_fluidTicks\": \"Тики жидкостей\",\n  \"config.rzero.checkpointPolicy_rollback_blockEvents\": \"События блоков (поршни, колокола и др.)\",\n  \"config.rzero.checkpointPolicy_rollback_pois\": \"Точки интереса жителей\",\n  \"config.rzero.checkpointPolicy_rollback_biomes\": \"Биомы\",\n  \"config.rzero.checkpointPolicy_rollback_players_position\": \"Координаты игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_motion\": \"Движение игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_health\": \"Здоровье игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_hunger\": \"Голод игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_experience\": \"Опыт игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_inventory\": \"Инвентарь игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_enderChest\": \"Эндер-сундук\",\n  \"config.rzero.checkpointPolicy_rollback_players_potionEffects\": \"Эффекты зелий\",\n  \"config.rzero.checkpointPolicy_rollback_players_cooldowns\": \"Перезарядка предметов\",\n  \"config.rzero.checkpointPolicy_rollback_players_openMenu\": \"Открытое меню\",\n  \"config.rzero.checkpointPolicy_rollback_players_abilities\": \"Способности\",\n  \"config.rzero.checkpointPolicy_rollback_players_recipeBook\": \"Книга рецептов\",\n  \"config.rzero.checkpointPolicy_rollback_players_spawnPoint\": \"Точка возрождения\",\n  \"config.rzero.checkpointPolicy_rollback_players_score\": \"Очки\",\n  \"config.rzero.checkpointPolicy_rollback_players_stats\": \"Статистика игроков\",\n  \"config.rzero.checkpointPolicy_rollback_entities_presence\": \"Наличие сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_entityId\": \"ID сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_tickCount\": \"Счетчик тиков\",\n  \"config.rzero.checkpointPolicy_rollback_entities_rngState\": \"RNG сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_livingTimers\": \"Таймеры живых сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_target\": \"Цель сущности\",\n  \"config.rzero.checkpointPolicy_rollback_entities_navigation\": \"Маршрут и навигация мобов\",\n  \"config.rzero.checkpointPolicy_rollback_entities_brainRam\": \"Память ИИ\",\n  \"config.rzero.checkpointPolicy_rollback_entities_passengers\": \"Пассажиры\",\n  \"config.rzero.checkpointPolicy_rollback_entities_mobRamCache\": \"Кэш памяти мобов\",\n  \"config.rzero.checkpointPolicy_rollback_world_time\": \"Время мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_weather\": \"Погода\",\n  \"config.rzero.checkpointPolicy_rollback_world_raids\": \"Рейды\",\n  \"config.rzero.checkpointPolicy_rollback_world_dragonFight\": \"Битва с Драконом Края\",\n  \"config.rzero.checkpointPolicy_rollback_world_scoreboard\": \"Таблицы счёта\",\n  \"config.rzero.checkpointPolicy_rollback_world_levelRng\": \"RNG измерения\",\n  \"config.rzero.checkpointPolicy_rollback_world_difficulty\": \"Сложность мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_worldSpawn\": \"Точка мирового спавна\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_bossbars\": \"Боссбары\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_forcedChunks\": \"Загруженные чанки\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_worldBorder\": \"Граница мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_gameRules\": \"Игровые правила\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_randomSequences\": \"Случайные последовательности\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_savedData\": \"Сохраненные данные мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_serverTickCount\": \"Счетчик тиков сервера\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_shufflingCounter\": \"Счетчик перемешивания\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_scheduledEvents\": \"Запланированные функции\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_tickRate\": \"Скорость тиков и заморозка\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_enabled\": \"Детерминированный естественный спавн\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_useSpawnEngine\": \"Детерминированный алгоритм спавна\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning\": \"Дискретный спавн (независимый от игрока)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning.tooltip\": \"Привязывает спавн мобов строго к сетке чанков и эпохам, исключая влияние микро-движений игрока.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp\": \"Синхронизация спавна животных (Экспериментально)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp.tooltip\": \"Воспроизводит пропущенные циклы спавна животных при входе в чанк.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp\": \"Синхронизация спавна монстров (Экспериментально)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp.tooltip\": \"Воспроизводит пропущенные циклы спавна монстров при входе в чанк.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_stampSpawnOrigin\": \"Штамп источника спавна\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_brainRng\": \"RNG интеллекта мобов\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_behaviorDurationRng\": \"Детерминированная длительность поведения мобов\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_shufflingListRng\": \"Детерминированное перемешивание задач ИИ\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_memoryIterationOrder\": \"Порядок перебора памяти\",\n  \"config.rzero.checkpointPolicy_determinism_loot_containerLoot\": \"Детерминированный лут в сундуках\",\n  \"config.rzero.checkpointPolicy_determinism_loot_mobDeathDrops\": \"Детерминированный дроп с мобов\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSeed\": \"Детерминированный сид рейда\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSpawnPosition\": \"Детерминированная точка появления рейда\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_wanderingTrader\": \"Детерминированный спавн торговца\",\n  \"config.rzero.checkpointPolicy_determinism_combat_knockbackRng\": \"RNG отдачи при ударах\",\n  \"config.rzero.clientRestore_cameraType\": \"Вид камеры (1-е / 3-е лицо)\",\n  \"config.rzero.clientRestore_stopFutureSounds\": \"Остановка будущих звуков\",\n  \"config.rzero.clientRestore_clearParticles\": \"Очистка частиц\",\n  \"config.rzero.clientRestore_restoreInventoryScreen\": \"Возвращать открытый инвентарь при откате\",\n  \"config.rzero.clientRestore_restoreCreativeTab\": \"Сохранять выбранную вкладку креатива\",\n  \"config.rzero.clientRestore_restoreRecipeBookTab\": \"Сохранять категорию книги рецептов\",\n  \"config.rzero.clientRestore_restoreSearchText\": \"Сохранять поисковый запрос в меню\",\n  \"config.rzero.clientRestore_resetHurtAnimation\": \"Сброс анимации получения урона\",\n  \"config.rzero.clientRestore_snapPlayerRotation\": \"Фиксация взгляда игрока\",\n  \"config.rzero.clientRestore_skipEquipAnimation\": \"Пропускать анимации смены предметов в руках\",\n  \"config.rzero.clientRestore_restoreChatState\": \"Восстановление состояния чата\",\n  \"config.rzero.clientRestore_suppressTerrainLoadingScreen\": \"Скрытие экрана загрузки территории\",\n  \"config.rzero.anchorMode.fixed\": \"Один игрок\",\n  \"config.rzero.anchorMode.multi\": \"Несколько ключевых игроков\",\n  \"config.rzero.anchorMode.everyone\": \"Все игроки\",\n  \"config.rzero.anchorMode.rotating\": \"Циклическая смена\",\n  \"config.rzero.subcategory.rollback\": \"Блоки\",\n  \"config.rzero.subcategory.rollback_players\": \"Игроки\",\n  \"config.rzero.subcategory.rollback_entities\": \"Сущности\",\n  \"config.rzero.subcategory.rollback_world\": \"Мир\",\n  \"config.rzero.subcategory.rollback_world_serverglobals\": \"Глобальные данные сервера\",\n  \"config.rzero.subcategory.determinism_naturalspawn\": \"Естественный спавн\",\n  \"config.rzero.subcategory.determinism_mobai\": \"Интеллект мобов\",\n  \"config.rzero.subcategory.determinism_loot\": \"Генерация лута\",\n  \"config.rzero.subcategory.determinism_spawns\": \"Рейды и спавны\",\n  \"config.rzero.subcategory.determinism_combat\": \"Боевой детерминизм\",\n  \"config.rzero.logsEnabled\": \"Включить логи\",\n  \"config.rzero.logsEnabled.tooltip\": \"Вывод отладочной информации (прогресс сохранения/отката/кэша, деревья бенчмарка) в консоль.\",\n  \"mod.rzero.description\": \"Посмертный возврат. Полностью откатывает время и состояние мира к последней точке сохранения при гибели.\",\n  \"ui.rzero.on\": \"ВКЛ\",\n  \"ui.rzero.off\": \"ВЫКЛ\",\n  \"ui.rzero.auto_save\": \"Автосохранение: %s\",\n  \"ui.rzero.adaptive_save\": \"Адаптивное сохранение: %s\",\n  \"ui.rzero.interval\": \"Интервал автосохранения: %s сек\",\n  \"ui.rzero.anchor_mode\": \"Режим ключевого игрока: %s\",\n  \"ui.rzero.cooldown_off\": \"Перезарядка отката: Выкл\",\n  \"ui.rzero.cooldown\": \"Перезарядка отката: %s сек\",\n  \"ui.rzero.boss_save\": \"Точка сохранения при победе над боссом: %s\",\n  \"ui.rzero.logs\": \"Логи: %s\",\n  \"ui.rzero.f3_hitboxes\": \"Подсветка петель F3+B: %s\",\n  \"command.rzero.no_permission\": \"[RZero] У вас нет прав оператора (включите читы в мире для ручного управления).\",\n  \"command.rzero.load.success\": \"[RZero] Мир возвращён к точке сохранения (тик=%s).\",\n  \"command.rzero.load.failed\": \"[RZero] Откат отменён: точка сохранения не найдена.\",\n  \"command.rzero.set.slot_success\": \"[RZero] Точка сохранения успешно записана в слот '%s'.\",\n  \"command.rzero.load.slot_success\": \"[RZero] Мир возвращён к слоту '%s' (тик=%s).\",\n  \"command.rzero.load.slot_failed\": \"[RZero] Откат отменён: точка сохранения для слота '%s' не найдена.\",\n  \"command.rzero.f3.status\": \"[RZero] Подсветка петель F3+B: %s\",\n  \"ui.rzero.dev_mode\": \"Режим разработчика: %s\",\n  \"command.rzero.dev.status\": \"[RZero] Режим разработчика: %s\"\n}";
+pub const LANG_EN_US_JSON: &str = "{\n  \"key.categories.rzero\": \"RZero\",\n  \"key.rzero.save\": \"Create Checkpoint\",\n  \"key.rzero.load\": \"Return to Checkpoint\",\n  \"key.rzero.anchor_menu\": \"Key Player Menu\",\n  \"gui.rzero.anchor.title\": \"Key Player Settings\",\n  \"gui.rzero.anchor.mode\": \"Mode\",\n  \"gui.rzero.anchor.mode.fixed\": \"Single Player\",\n  \"gui.rzero.anchor.mode.multi\": \"Multiple Players\",\n  \"gui.rzero.anchor.mode.everyone\": \"All Players\",\n  \"gui.rzero.anchor.mode.rotating\": \"Rotation\",\n  \"gui.rzero.anchor.cooldown\": \"Rollback Cooldown\",\n  \"gui.rzero.anchor.cooldown.label\": \"Rollback Cooldown (in seconds):\",\n  \"gui.rzero.anchor.cooldown.disabled\": \"Rollback Cooldown: Off\",\n  \"gui.rzero.anchor.rotation\": \"Rotation Interval\",\n  \"gui.rzero.anchor.rotation.label\": \"Rotation Interval (in seconds):\",\n  \"gui.rzero.anchor.apply\": \"Apply\",\n  \"gui.rzero.anchor.applied\": \"[RZero] Create or return to a checkpoint to apply settings.\",\n  \"gui.rzero.anchor.no_permission\": \"[RZero] You do not have permission to manage key players.\",\n  \"gui.rzero.anchor.note.everyone\": \"All players on the server act as key players.\",\n  \"gui.rzero.anchor.note.rotating\": \"Key player changes cyclically among online players.\",\n  \"gamerule.category.rzero\": \"RZero\",\n  \"gamerule.rzeroAutoSave\": \"Auto-Save\",\n  \"gamerule.rzeroAutoSave.description\": \"Automatically creates checkpoints.\",\n  \"gamerule.rzeroFixedInterval\": \"Interval\",\n  \"gamerule.rzeroFixedInterval.description\": \"Fixed interval between auto-saves (in seconds).\",\n  \"gamerule.rzeroUseRandomInterval\": \"Random Interval\",\n  \"gamerule.rzeroUseRandomInterval.description\": \"Uses a random time between Minimum and Maximum intervals.\",\n  \"gamerule.rzeroRandomIntervalMin\": \"Minimum Interval\",\n  \"gamerule.rzeroRandomIntervalMin.description\": \"Minimum interval between auto-saves (in seconds).\",\n  \"gamerule.rzeroRandomIntervalMax\": \"Maximum Interval\",\n  \"gamerule.rzeroRandomIntervalMax.description\": \"Maximum interval between auto-saves (in seconds).\",\n  \"gamerule.rzeroPlayRollbackSound\": \"Rollback Sound on Death\",\n  \"gamerule.rzeroPlayRollbackSound.description\": \"Play sound on rollback.\",\n  \"gamerule.rzeroUseAdaptiveMode\": \"Adaptive Save\",\n  \"gamerule.rzeroUseAdaptiveMode.description\": \"Automatically creates checkpoints prior to danger and after combat.\",\n  \"gamerule.rzeroAdaptiveInterval\": \"Tranquil Interval (in seconds)\",\n  \"gamerule.rzeroAdaptiveInterval.description\": \"Required safety period before auto-save in Adaptive Save mode (in seconds).\",\n  \"command.rzero.set.success\": \"[RZero] Checkpoint created successfully.\",\n  \"command.rzero.anchor.hint.newCheckpoint\": \"[RZero] Run /rzero set to update key player configuration for the current checkpoint.\",\n  \"command.rzero.anchor.mode\": \"[RZero] Key player mode: %s\",\n  \"command.rzero.anchor.cooldown\": \"[RZero] Rollback cooldown: %s (in seconds)\",\n  \"command.rzero.anchor.cooldown.off\": \"[RZero] Rollback cooldown disabled: every key player death rewinds the world.\",\n  \"command.rzero.anchor.status\": \"[RZero] Key player mode: %s | rollback cooldown: %s | active key players: %s\",\n  \"command.rzero.anchor.mode.fixed\": \"Single Player (%s)\",\n  \"command.rzero.anchor.mode.multi\": \"Multiple Key Players (%s pinned)\",\n  \"command.rzero.anchor.mode.everyone\": \"All Players\",\n  \"command.rzero.anchor.mode.rotating\": \"Rotation (%s in seconds)\",\n  \"command.rzero.anchor.cooldown.format\": \"%s s (ready in %s s)\",\n  \"command.rzero.anchor.cooldown.disabled\": \"disabled\",\n  \"command.rzero.anchor.none\": \"(none)\",\n  \"config.rzero.title\": \"RZero Configuration\",\n  \"config.rzero.uiMode\": \"Settings Mode\",\n  \"config.rzero.uiMode.basic\": \"Standard\",\n  \"config.rzero.uiMode.expert\": \"Advanced\",\n  \"config.rzero.uiMode.tooltip\": \"Hides advanced determinism and synchronization parameters.\",\n  \"config.rzero.category.general\": \"General\",\n  \"config.rzero.category.adaptive\": \"Adaptive Save\",\n  \"config.rzero.category.anchor\": \"Key Player\",\n  \"config.rzero.category.policy\": \"Rollback\",\n  \"config.rzero.category.determinism\": \"Determinism\",\n  \"config.rzero.category.clientRestore\": \"Client\",\n  \"config.rzero.adaptive_minSaveGapSeconds\": \"Min. Interval Between Saves (in seconds)\",\n  \"config.rzero.adaptive_relaxTimeSeconds\": \"Post-Combat Tranquil Time (in seconds)\",\n  \"config.rzero.adaptive_postCombatSavePercent\": \"Post-Combat Save Chance (%)\",\n  \"config.rzero.adaptive_saveOnBossDefeat\": \"Checkpoint on Boss Defeat\",\n  \"config.rzero.checkpointPolicy_rollback_players_preserveNewPlayerInventory\": \"Do Not Reset New Players' Inventory\",\n  \"config.rzero.checkpointPolicy_rollback_entities_droppedItems\": \"Dropped Items\",\n  \"config.rzero.checkpointPolicy_rollback_entities_experienceOrbs\": \"Experience Orbs\",\n  \"config.rzero.clientRestore_displayChatNotifications\": \"Chat Notifications\",\n  \"config.rzero.clientRestore_meshCacheEnabled\": \"Geometry Cache (GPU)\",\n  \"config.rzero.clientRestore_meshCacheEnabled.tooltip\": \"Stores chunk meshes in VRAM for instant rendering.\",\n  \"config.rzero.clientRestore_meshCacheRadius\": \"Geometry Cache Radius\",\n  \"config.rzero.clientRestore_meshCacheRadius.tooltip\": \"Chunk mesh caching radius. Increases VRAM usage.\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb\": \"Geometry Cache Budget (MB)\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb.tooltip\": \"Maximum video memory allocated for geometry buffers.\",\n  \"config.rzero.anchorMode\": \"Key Player Mode\",\n  \"config.rzero.rotationSeconds\": \"Key Player Rotation (in seconds)\",\n  \"config.rzero.rollbackCooldownSeconds\": \"Key Player Rollback Cooldown (in seconds)\",\n  \"config.rzero.rzerochashEnabled\": \"Chunk Cache\",\n  \"config.rzero.rzerochashEnabled.tooltip\": \"Caches chunks and lighting on the client side during rollback.\",\n  \"config.rzero.checkpointPolicy_rollback_blocks\": \"Blocks\",\n  \"config.rzero.checkpointPolicy_rollback_blockEntities\": \"Block Entities\",\n  \"config.rzero.checkpointPolicy_rollback_blockTicks\": \"Block Ticks\",\n  \"config.rzero.checkpointPolicy_rollback_fluidTicks\": \"Fluid Ticks\",\n  \"config.rzero.checkpointPolicy_rollback_blockEvents\": \"Block Events\",\n  \"config.rzero.checkpointPolicy_rollback_pois\": \"Villager Points of Interest (POI)\",\n  \"config.rzero.checkpointPolicy_rollback_biomes\": \"Biomes\",\n  \"config.rzero.checkpointPolicy_rollback_players_position\": \"Player Coordinates\",\n  \"config.rzero.checkpointPolicy_rollback_players_motion\": \"Player Motion\",\n  \"config.rzero.checkpointPolicy_rollback_players_health\": \"Player Health\",\n  \"config.rzero.checkpointPolicy_rollback_players_hunger\": \"Player Hunger\",\n  \"config.rzero.checkpointPolicy_rollback_players_experience\": \"Player Experience\",\n  \"config.rzero.checkpointPolicy_rollback_players_inventory\": \"Player Inventory\",\n  \"config.rzero.checkpointPolicy_rollback_players_enderChest\": \"Ender Chest\",\n  \"config.rzero.checkpointPolicy_rollback_players_potionEffects\": \"Potion Effects\",\n  \"config.rzero.checkpointPolicy_rollback_players_cooldowns\": \"Item Cooldowns\",\n  \"config.rzero.checkpointPolicy_rollback_players_openMenu\": \"Open Menu\",\n  \"config.rzero.checkpointPolicy_rollback_players_abilities\": \"Abilities\",\n  \"config.rzero.checkpointPolicy_rollback_players_recipeBook\": \"Recipe Book\",\n  \"config.rzero.checkpointPolicy_rollback_players_spawnPoint\": \"Spawn Point\",\n  \"config.rzero.checkpointPolicy_rollback_players_score\": \"Score\",\n  \"config.rzero.checkpointPolicy_rollback_players_stats\": \"Player Statistics\",\n  \"config.rzero.checkpointPolicy_rollback_entities_presence\": \"Entity Presence\",\n  \"config.rzero.checkpointPolicy_rollback_entities_entityId\": \"Entity ID\",\n  \"config.rzero.checkpointPolicy_rollback_entities_tickCount\": \"Tick Counter\",\n  \"config.rzero.checkpointPolicy_rollback_entities_rngState\": \"Entity RNG\",\n  \"config.rzero.checkpointPolicy_rollback_entities_livingTimers\": \"Living Entity Timers\",\n  \"config.rzero.checkpointPolicy_rollback_entities_target\": \"Entity Target\",\n  \"config.rzero.checkpointPolicy_rollback_entities_navigation\": \"Mob Pathfinding & Navigation\",\n  \"config.rzero.checkpointPolicy_rollback_entities_brainRam\": \"Brain RAM\",\n  \"config.rzero.checkpointPolicy_rollback_entities_passengers\": \"Passengers\",\n  \"config.rzero.checkpointPolicy_rollback_entities_mobRamCache\": \"Mob RAM Cache\",\n  \"config.rzero.checkpointPolicy_rollback_world_time\": \"World Time\",\n  \"config.rzero.checkpointPolicy_rollback_world_weather\": \"Weather\",\n  \"config.rzero.checkpointPolicy_rollback_world_raids\": \"Raids\",\n  \"config.rzero.checkpointPolicy_rollback_world_dragonFight\": \"Ender Dragon Fight\",\n  \"config.rzero.checkpointPolicy_rollback_world_scoreboard\": \"Scoreboards\",\n  \"config.rzero.checkpointPolicy_rollback_world_levelRng\": \"Dimension RNG\",\n  \"config.rzero.checkpointPolicy_rollback_world_difficulty\": \"World Difficulty\",\n  \"config.rzero.checkpointPolicy_rollback_world_worldSpawn\": \"World Spawn Point\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_bossbars\": \"Bossbars\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_forcedChunks\": \"Loaded Chunks\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_worldBorder\": \"World Border\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_gameRules\": \"Game Rules\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_randomSequences\": \"Random Sequences\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_savedData\": \"Saved World Data\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_serverTickCount\": \"Server Tick Counter\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_shufflingCounter\": \"Shuffling Counter\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_scheduledEvents\": \"Scheduled Functions\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_tickRate\": \"Tick Rate & Freeze\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_enabled\": \"Deterministic Natural Spawning\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_useSpawnEngine\": \"Deterministic Spawn Engine\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning\": \"Discrete Chunk Spawning\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning.tooltip\": \"Locks mob spawning strictly to the chunk grid and epochs, removing variance from player micro-movements.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp\": \"Animal Spawn Synchronization (Experimental)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp.tooltip\": \"Replays missed animal spawn cycles upon entering the chunk.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp\": \"Monster Spawn Synchronization\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp.tooltip\": \"Replays missed monster spawn cycles upon entering the chunk.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_stampSpawnOrigin\": \"Spawn Origin Stamp\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_brainRng\": \"Mob AI RNG (Brain RNG)\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_behaviorDurationRng\": \"Deterministic Behavior Duration\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_shufflingListRng\": \"Deterministic AI Task Shuffling\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_memoryIterationOrder\": \"Memory Iteration Order\",\n  \"config.rzero.checkpointPolicy_determinism_loot_containerLoot\": \"Deterministic Container Loot\",\n  \"config.rzero.checkpointPolicy_determinism_loot_mobDeathDrops\": \"Deterministic Mob Drops\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSeed\": \"Deterministic Raid Seed\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSpawnPosition\": \"Deterministic Raid Spawn Position\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_wanderingTrader\": \"Deterministic Wandering Trader Spawn\",\n  \"config.rzero.checkpointPolicy_determinism_combat_knockbackRng\": \"Knockback RNG\",\n  \"config.rzero.clientRestore_cameraType\": \"Camera Perspective (1st / 3rd person)\",\n  \"config.rzero.clientRestore_stopFutureSounds\": \"Stop Future Sounds\",\n  \"config.rzero.clientRestore_clearParticles\": \"Clear Particles\",\n  \"config.rzero.clientRestore_restoreInventoryScreen\": \"Restore Open Inventory on Rollback\",\n  \"config.rzero.clientRestore_restoreCreativeTab\": \"Restore Creative Tab\",\n  \"config.rzero.clientRestore_restoreRecipeBookTab\": \"Restore Recipe Book Category\",\n  \"config.rzero.clientRestore_restoreSearchText\": \"Restore Search Query in Menu\",\n  \"config.rzero.clientRestore_resetHurtAnimation\": \"Reset Damage Animation\",\n  \"config.rzero.clientRestore_snapPlayerRotation\": \"Player Look Direction Lock\",\n  \"config.rzero.clientRestore_skipEquipAnimation\": \"Skip Hand Item Equip Animation\",\n  \"config.rzero.clientRestore_restoreChatState\": \"Restore Chat State\",\n  \"config.rzero.clientRestore_suppressTerrainLoadingScreen\": \"Hide Terrain Loading Screen\",\n  \"config.rzero.anchorMode.fixed\": \"Single Player\",\n  \"config.rzero.anchorMode.multi\": \"Multiple Key Players\",\n  \"config.rzero.anchorMode.everyone\": \"All Players\",\n  \"config.rzero.anchorMode.rotating\": \"Rotation\",\n  \"config.rzero.subcategory.rollback\": \"Blocks\",\n  \"config.rzero.subcategory.rollback_players\": \"Players\",\n  \"config.rzero.subcategory.rollback_entities\": \"Entities\",\n  \"config.rzero.subcategory.rollback_world\": \"World\",\n  \"config.rzero.subcategory.rollback_world_serverglobals\": \"Server Globals\",\n  \"config.rzero.subcategory.determinism_naturalspawn\": \"Natural Spawn\",\n  \"config.rzero.subcategory.determinism_mobai\": \"Mob AI\",\n  \"config.rzero.subcategory.determinism_loot\": \"Loot Generation\",\n  \"config.rzero.subcategory.determinism_spawns\": \"Raids & Spawns\",\n  \"config.rzero.subcategory.determinism_combat\": \"Combat Determinism\",\n  \"config.rzero.logsEnabled\": \"Enable Logs\",\n  \"config.rzero.logsEnabled.tooltip\": \"Print diagnostic info (checkpoint/rollback/cache progress, benchmark trees) to the console.\",\n  \"mod.rzero.description\": \"Return by Death. Completely rewind the timeline and the world state to your last checkpoint upon death.\",\n  \"ui.rzero.on\": \"ON\",\n  \"ui.rzero.off\": \"OFF\",\n  \"ui.rzero.auto_save\": \"Auto-Save: %s\",\n  \"ui.rzero.adaptive_save\": \"Adaptive Save: %s\",\n  \"ui.rzero.interval\": \"Auto-Save Interval: %s s\",\n  \"ui.rzero.anchor_mode\": \"Key Player Mode: %s\",\n  \"ui.rzero.cooldown_off\": \"Rollback Cooldown: Off\",\n  \"ui.rzero.cooldown\": \"Rollback Cooldown: %s s\",\n  \"ui.rzero.boss_save\": \"Checkpoint on Boss Defeat: %s\",\n  \"ui.rzero.logs\": \"Logs: %s\",\n  \"ui.rzero.f3_hitboxes\": \"F3 Loop Hitboxes: %s\",\n  \"command.rzero.no_permission\": \"[RZero] You do not have permission (enable cheats for manual control).\",\n  \"command.rzero.load.success\": \"[RZero] Timeline rolled back to checkpoint (tick=%s).\",\n  \"command.rzero.load.failed\": \"[RZero] Rollback aborted: No timeline origin found.\",\n  \"command.rzero.set.slot_success\": \"[RZero] Checkpoint saved to slot '%s' successfully.\",\n  \"command.rzero.load.slot_success\": \"[RZero] Timeline rolled back to slot '%s' (tick=%s).\",\n  \"command.rzero.load.slot_failed\": \"[RZero] Rollback aborted: No timeline origin found for slot '%s'.\",\n  \"command.rzero.f3.status\": \"[RZero] F3 loop hitboxes: %s\",\n  \"ui.rzero.dev_mode\": \"Developer Mode: %s\",\n  \"command.rzero.dev.status\": \"[RZero] Developer Mode: %s\",\n  \"command.rzero.set.failed\": \"[RZero] Failed to create checkpoint (I/O error).\",\n  \"command.rzero.set.slot_failed\": \"[RZero] Failed to save checkpoint to slot '%s' (I/O error).\"\n}";
+pub const LANG_RU_RU_JSON: &str = "{\n  \"key.categories.rzero\": \"RZero\",\n  \"key.rzero.save\": \"Создать точку сохранения\",\n  \"key.rzero.load\": \"Вернуться к точке сохранения\",\n  \"key.rzero.anchor_menu\": \"Меню ключевых игроков\",\n  \"gui.rzero.anchor.title\": \"Настройка ключевых игроков\",\n  \"gui.rzero.anchor.mode\": \"Режим\",\n  \"gui.rzero.anchor.mode.fixed\": \"Один игрок\",\n  \"gui.rzero.anchor.mode.multi\": \"Несколько игроков\",\n  \"gui.rzero.anchor.mode.everyone\": \"Все игроки\",\n  \"gui.rzero.anchor.mode.rotating\": \"Ротация\",\n  \"gui.rzero.anchor.cooldown\": \"Перезарядка отката\",\n  \"gui.rzero.anchor.cooldown.label\": \"Перезарядка отката (в секундах):\",\n  \"gui.rzero.anchor.cooldown.disabled\": \"Перезарядка отката: Выкл\",\n  \"gui.rzero.anchor.rotation\": \"Интервал ротации\",\n  \"gui.rzero.anchor.rotation.label\": \"Интервал ротации (в секундах):\",\n  \"gui.rzero.anchor.apply\": \"Применить\",\n  \"gui.rzero.anchor.applied\": \"[RZero] Создайте точку сохранения или вернитесь к ней для применения настроек.\",\n  \"gui.rzero.anchor.no_permission\": \"[RZero] У вас нет прав оператора для управления ключевыми игроками.\",\n  \"gui.rzero.anchor.note.everyone\": \"Все игроки на сервере являются ключевыми.\",\n  \"gui.rzero.anchor.note.rotating\": \"Ключевой игрок циклически меняется среди игроков на сервере.\",\n  \"gamerule.category.rzero\": \"RZero\",\n  \"gamerule.rzeroAutoSave\": \"Автосохранение\",\n  \"gamerule.rzeroAutoSave.description\": \"Автоматически создает точки сохранения.\",\n  \"gamerule.rzeroFixedInterval\": \"Интервал\",\n  \"gamerule.rzeroFixedInterval.description\": \"Фиксированное время между автосохранениями (в секундах).\",\n  \"gamerule.rzeroUseRandomInterval\": \"Случайный интервал\",\n  \"gamerule.rzeroUseRandomInterval.description\": \"Использовать случайное время между Минимальным и Максимальным интервалами.\",\n  \"gamerule.rzeroRandomIntervalMin\": \"Минимальный интервал\",\n  \"gamerule.rzeroRandomIntervalMin.description\": \"Минимальное время между сохранениями (в секундах).\",\n  \"gamerule.rzeroRandomIntervalMax\": \"Максимальный интервал\",\n  \"gamerule.rzeroRandomIntervalMax.description\": \"Максимальное время между сохранениями (в секундах).\",\n  \"gamerule.rzeroPlayRollbackSound\": \"Звук отката при гибели\",\n  \"gamerule.rzeroPlayRollbackSound.description\": \"Воспроизведение звука при откате.\",\n  \"gamerule.rzeroUseAdaptiveMode\": \"Адаптивное сохранение\",\n  \"gamerule.rzeroUseAdaptiveMode.description\": \"Автоматически создает точки сохранения перед опасными ситуациями и после победы в бою.\",\n  \"gamerule.rzeroAdaptiveInterval\": \"Интервал затишья (в секундах)\",\n  \"gamerule.rzeroAdaptiveInterval.description\": \"Необходимое время безопасности перед автосохранением в Адаптивном режиме (в секундах).\",\n  \"command.rzero.set.success\": \"[RZero] Точка сохранения успешно создана.\",\n  \"command.rzero.anchor.hint.newCheckpoint\": \"[RZero] Введите /rzero set, чтобы обновить конфигурацию ключевых игроков в текущей точке сохранения.\",\n  \"command.rzero.anchor.mode\": \"[RZero] Режим ключевого игрока: %s\",\n  \"command.rzero.anchor.cooldown\": \"[RZero] Перезарядка отката: %s (в секундах)\",\n  \"command.rzero.anchor.cooldown.off\": \"[RZero] Перезарядка отката отключена: каждая гибель ключевого игрока откатывает мир.\",\n  \"command.rzero.anchor.status\": \"[RZero] Режим ключевого игрока: %s | перезарядка отката: %s | активные ключевые игроки: %s\",\n  \"command.rzero.anchor.mode.fixed\": \"Один игрок (%s)\",\n  \"command.rzero.anchor.mode.multi\": \"Несколько ключевых игроков (%s закреплено)\",\n  \"command.rzero.anchor.mode.everyone\": \"Все игроки\",\n  \"command.rzero.anchor.mode.rotating\": \"Циклическая смена (%s в секундах)\",\n  \"command.rzero.anchor.cooldown.format\": \"%s сек (готов через %s сек)\",\n  \"command.rzero.anchor.cooldown.disabled\": \"отключена\",\n  \"command.rzero.anchor.none\": \"(отсутствуют)\",\n  \"config.rzero.title\": \"Настройки RZero\",\n  \"config.rzero.uiMode\": \"Отображение настроек\",\n  \"config.rzero.uiMode.basic\": \"Стандартные\",\n  \"config.rzero.uiMode.expert\": \"Расширенные\",\n  \"config.rzero.uiMode.tooltip\": \"Скрывает расширенные параметры детерминизма и синхронизации.\",\n  \"config.rzero.category.general\": \"Общие\",\n  \"config.rzero.category.adaptive\": \"Адаптивное сохранение\",\n  \"config.rzero.category.anchor\": \"Ключевой игрок\",\n  \"config.rzero.category.policy\": \"Откат\",\n  \"config.rzero.category.determinism\": \"Детерминизм\",\n  \"config.rzero.category.clientRestore\": \"Клиент\",\n  \"config.rzero.adaptive_minSaveGapSeconds\": \"Мин. интервал между сохранениями (в секундах)\",\n  \"config.rzero.adaptive_relaxTimeSeconds\": \"Время затишья после боя (в секундах)\",\n  \"config.rzero.adaptive_postCombatSavePercent\": \"Шанс сохранения после боя (%)\",\n  \"config.rzero.adaptive_saveOnBossDefeat\": \"Точка сохранения при победе над боссом\",\n  \"config.rzero.checkpointPolicy_rollback_players_preserveNewPlayerInventory\": \"Не сбрасывать инвентарь новым игрокам\",\n  \"config.rzero.checkpointPolicy_rollback_entities_droppedItems\": \"Выпавшие предметы\",\n  \"config.rzero.checkpointPolicy_rollback_entities_experienceOrbs\": \"Сферы опыта\",\n  \"config.rzero.clientRestore_displayChatNotifications\": \"Сообщения в чате\",\n  \"config.rzero.clientRestore_meshCacheEnabled\": \"Кеш геометрии\",\n  \"config.rzero.clientRestore_meshCacheEnabled.tooltip\": \"Хранит полигоны чанков в VRAM для моментальной отрисовки.\",\n  \"config.rzero.clientRestore_meshCacheRadius\": \"Радиус кеша геометрии\",\n  \"config.rzero.clientRestore_meshCacheRadius.tooltip\": \"Радиус кеширования сетки чанков. Увеличивает расход видеопамяти.\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb\": \"Лимит кеша геометрии (МБ)\",\n  \"config.rzero.clientRestore_meshCacheBudgetMb.tooltip\": \"Максимальный объем видеопамяти под буферы геометрии.\",\n  \"config.rzero.anchorMode\": \"Режим ключевого игрока\",\n  \"config.rzero.rotationSeconds\": \"Смена ключевого игрока (в секундах)\",\n  \"config.rzero.rollbackCooldownSeconds\": \"Перезарядка отката ключевого игрока (в секундах)\",\n  \"config.rzero.rzerochashEnabled\": \"Кеш чанков\",\n  \"config.rzero.rzerochashEnabled.tooltip\": \"Кеширует чанки и освещение на стороне клиента во время отката.\",\n  \"config.rzero.checkpointPolicy_rollback_blocks\": \"Блоки\",\n  \"config.rzero.checkpointPolicy_rollback_blockEntities\": \"Блок-сущности (сундуки, печи и др.)\",\n  \"config.rzero.checkpointPolicy_rollback_blockTicks\": \"Тики блоков\",\n  \"config.rzero.checkpointPolicy_rollback_fluidTicks\": \"Тики жидкостей\",\n  \"config.rzero.checkpointPolicy_rollback_blockEvents\": \"События блоков (поршни, колокола и др.)\",\n  \"config.rzero.checkpointPolicy_rollback_pois\": \"Точки интереса жителей\",\n  \"config.rzero.checkpointPolicy_rollback_biomes\": \"Биомы\",\n  \"config.rzero.checkpointPolicy_rollback_players_position\": \"Координаты игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_motion\": \"Движение игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_health\": \"Здоровье игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_hunger\": \"Голод игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_experience\": \"Опыт игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_inventory\": \"Инвентарь игрока\",\n  \"config.rzero.checkpointPolicy_rollback_players_enderChest\": \"Эндер-сундук\",\n  \"config.rzero.checkpointPolicy_rollback_players_potionEffects\": \"Эффекты зелий\",\n  \"config.rzero.checkpointPolicy_rollback_players_cooldowns\": \"Перезарядка предметов\",\n  \"config.rzero.checkpointPolicy_rollback_players_openMenu\": \"Открытое меню\",\n  \"config.rzero.checkpointPolicy_rollback_players_abilities\": \"Способности\",\n  \"config.rzero.checkpointPolicy_rollback_players_recipeBook\": \"Книга рецептов\",\n  \"config.rzero.checkpointPolicy_rollback_players_spawnPoint\": \"Точка возрождения\",\n  \"config.rzero.checkpointPolicy_rollback_players_score\": \"Очки\",\n  \"config.rzero.checkpointPolicy_rollback_players_stats\": \"Статистика игроков\",\n  \"config.rzero.checkpointPolicy_rollback_entities_presence\": \"Наличие сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_entityId\": \"ID сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_tickCount\": \"Счетчик тиков\",\n  \"config.rzero.checkpointPolicy_rollback_entities_rngState\": \"RNG сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_livingTimers\": \"Таймеры живых сущностей\",\n  \"config.rzero.checkpointPolicy_rollback_entities_target\": \"Цель сущности\",\n  \"config.rzero.checkpointPolicy_rollback_entities_navigation\": \"Маршрут и навигация мобов\",\n  \"config.rzero.checkpointPolicy_rollback_entities_brainRam\": \"Память ИИ\",\n  \"config.rzero.checkpointPolicy_rollback_entities_passengers\": \"Пассажиры\",\n  \"config.rzero.checkpointPolicy_rollback_entities_mobRamCache\": \"Кэш памяти мобов\",\n  \"config.rzero.checkpointPolicy_rollback_world_time\": \"Время мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_weather\": \"Погода\",\n  \"config.rzero.checkpointPolicy_rollback_world_raids\": \"Рейды\",\n  \"config.rzero.checkpointPolicy_rollback_world_dragonFight\": \"Битва с Драконом Края\",\n  \"config.rzero.checkpointPolicy_rollback_world_scoreboard\": \"Таблицы счёта\",\n  \"config.rzero.checkpointPolicy_rollback_world_levelRng\": \"RNG измерения\",\n  \"config.rzero.checkpointPolicy_rollback_world_difficulty\": \"Сложность мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_worldSpawn\": \"Точка мирового спавна\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_bossbars\": \"Боссбары\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_forcedChunks\": \"Загруженные чанки\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_worldBorder\": \"Граница мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_gameRules\": \"Игровые правила\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_randomSequences\": \"Случайные последовательности\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_savedData\": \"Сохраненные данные мира\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_serverTickCount\": \"Счетчик тиков сервера\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_shufflingCounter\": \"Счетчик перемешивания\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_scheduledEvents\": \"Запланированные функции\",\n  \"config.rzero.checkpointPolicy_rollback_world_serverGlobals_tickRate\": \"Скорость тиков и заморозка\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_enabled\": \"Детерминированный естественный спавн\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_useSpawnEngine\": \"Детерминированный алгоритм спавна\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning\": \"Дискретный спавн (независимый от игрока)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_independentSpawning.tooltip\": \"Привязывает спавн мобов строго к сетке чанков и эпохам, исключая влияние микро-движений игрока.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp\": \"Синхронизация спавна животных (Экспериментально)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_catchUp.tooltip\": \"Воспроизводит пропущенные циклы спавна животных при входе в чанк.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp\": \"Синхронизация спавна монстров (Экспериментально)\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_monsterCatchUp.tooltip\": \"Воспроизводит пропущенные циклы спавна монстров при входе в чанк.\",\n  \"config.rzero.checkpointPolicy_determinism_naturalSpawn_stampSpawnOrigin\": \"Штамп источника спавна\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_brainRng\": \"RNG интеллекта мобов\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_behaviorDurationRng\": \"Детерминированная длительность поведения мобов\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_shufflingListRng\": \"Детерминированное перемешивание задач ИИ\",\n  \"config.rzero.checkpointPolicy_determinism_mobAi_memoryIterationOrder\": \"Порядок перебора памяти\",\n  \"config.rzero.checkpointPolicy_determinism_loot_containerLoot\": \"Детерминированный лут в сундуках\",\n  \"config.rzero.checkpointPolicy_determinism_loot_mobDeathDrops\": \"Детерминированный дроп с мобов\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSeed\": \"Детерминированный сид рейда\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_raidSpawnPosition\": \"Детерминированная точка появления рейда\",\n  \"config.rzero.checkpointPolicy_determinism_spawns_wanderingTrader\": \"Детерминированный спавн торговца\",\n  \"config.rzero.checkpointPolicy_determinism_combat_knockbackRng\": \"RNG отдачи при ударах\",\n  \"config.rzero.clientRestore_cameraType\": \"Вид камеры (1-е / 3-е лицо)\",\n  \"config.rzero.clientRestore_stopFutureSounds\": \"Остановка будущих звуков\",\n  \"config.rzero.clientRestore_clearParticles\": \"Очистка частиц\",\n  \"config.rzero.clientRestore_restoreInventoryScreen\": \"Возвращать открытый инвентарь при откате\",\n  \"config.rzero.clientRestore_restoreCreativeTab\": \"Сохранять выбранную вкладку креатива\",\n  \"config.rzero.clientRestore_restoreRecipeBookTab\": \"Сохранять категорию книги рецептов\",\n  \"config.rzero.clientRestore_restoreSearchText\": \"Сохранять поисковый запрос в меню\",\n  \"config.rzero.clientRestore_resetHurtAnimation\": \"Сброс анимации получения урона\",\n  \"config.rzero.clientRestore_snapPlayerRotation\": \"Фиксация взгляда игрока\",\n  \"config.rzero.clientRestore_skipEquipAnimation\": \"Пропускать анимации смены предметов в руках\",\n  \"config.rzero.clientRestore_restoreChatState\": \"Восстановление состояния чата\",\n  \"config.rzero.clientRestore_suppressTerrainLoadingScreen\": \"Скрытие экрана загрузки территории\",\n  \"config.rzero.anchorMode.fixed\": \"Один игрок\",\n  \"config.rzero.anchorMode.multi\": \"Несколько ключевых игроков\",\n  \"config.rzero.anchorMode.everyone\": \"Все игроки\",\n  \"config.rzero.anchorMode.rotating\": \"Циклическая смена\",\n  \"config.rzero.subcategory.rollback\": \"Блоки\",\n  \"config.rzero.subcategory.rollback_players\": \"Игроки\",\n  \"config.rzero.subcategory.rollback_entities\": \"Сущности\",\n  \"config.rzero.subcategory.rollback_world\": \"Мир\",\n  \"config.rzero.subcategory.rollback_world_serverglobals\": \"Глобальные данные сервера\",\n  \"config.rzero.subcategory.determinism_naturalspawn\": \"Естественный спавн\",\n  \"config.rzero.subcategory.determinism_mobai\": \"Интеллект мобов\",\n  \"config.rzero.subcategory.determinism_loot\": \"Генерация лута\",\n  \"config.rzero.subcategory.determinism_spawns\": \"Рейды и спавны\",\n  \"config.rzero.subcategory.determinism_combat\": \"Боевой детерминизм\",\n  \"config.rzero.logsEnabled\": \"Включить логи\",\n  \"config.rzero.logsEnabled.tooltip\": \"Вывод отладочной информации (прогресс сохранения/отката/кэша, деревья бенчмарка) в консоль.\",\n  \"mod.rzero.description\": \"Посмертный возврат. Полностью откатывает время и состояние мира к последней точке сохранения при гибели.\",\n  \"ui.rzero.on\": \"ВКЛ\",\n  \"ui.rzero.off\": \"ВЫКЛ\",\n  \"ui.rzero.auto_save\": \"Автосохранение: %s\",\n  \"ui.rzero.adaptive_save\": \"Адаптивное сохранение: %s\",\n  \"ui.rzero.interval\": \"Интервал автосохранения: %s сек\",\n  \"ui.rzero.anchor_mode\": \"Режим ключевого игрока: %s\",\n  \"ui.rzero.cooldown_off\": \"Перезарядка отката: Выкл\",\n  \"ui.rzero.cooldown\": \"Перезарядка отката: %s сек\",\n  \"ui.rzero.boss_save\": \"Точка сохранения при победе над боссом: %s\",\n  \"ui.rzero.logs\": \"Логи: %s\",\n  \"ui.rzero.f3_hitboxes\": \"Подсветка петель F3+B: %s\",\n  \"command.rzero.no_permission\": \"[RZero] У вас нет прав оператора (включите читы в мире для ручного управления).\",\n  \"command.rzero.load.success\": \"[RZero] Мир возвращён к точке сохранения (тик=%s).\",\n  \"command.rzero.load.failed\": \"[RZero] Откат отменён: точка сохранения не найдена.\",\n  \"command.rzero.set.slot_success\": \"[RZero] Точка сохранения успешно записана в слот '%s'.\",\n  \"command.rzero.load.slot_success\": \"[RZero] Мир возвращён к слоту '%s' (тик=%s).\",\n  \"command.rzero.load.slot_failed\": \"[RZero] Откат отменён: точка сохранения для слота '%s' не найдена.\",\n  \"command.rzero.f3.status\": \"[RZero] Подсветка петель F3+B: %s\",\n  \"ui.rzero.dev_mode\": \"Режим разработчика: %s\",\n  \"command.rzero.dev.status\": \"[RZero] Режим разработчика: %s\",\n  \"command.rzero.set.failed\": \"[RZero] Не удалось создать точку сохранения (ошибка записи на диск).\",\n  \"command.rzero.set.slot_failed\": \"[RZero] Не удалось сохранить точку сохранения в слот '%s' (ошибка записи на диск).\"\n}";
 
 // ============================================================================
 // Submodule: types.rs
@@ -1545,20 +1545,21 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
                 .map(|g| g.uuid)
         });
         if let Some(uuid) = initial_player {
-            create_checkpoint_on_server(game, Some(uuid));
-            with_state_mut(|st| {
-                st.current_interval_ticks = if st.use_random_interval {
-                    let min = st.random_min_sec.max(5);
-                    let max = st.random_max_sec.max(min + 1);
-                    let mut rng = LegacyRandom::new(now);
-                    let extra = rng.next_int_bound((max - min) + 1).unwrap_or(0);
-                    i64::from(min + extra) * 20
-                } else {
-                    i64::from(st.fixed_interval_sec.max(5)) * 20
-                };
-            });
-            if with_state(|st| st.logs) {
-                log::info!("[RZero] Initial checkpoint created on player join.");
+            if create_checkpoint_on_server(game, Some(uuid)) {
+                with_state_mut(|st| {
+                    st.current_interval_ticks = if st.use_random_interval {
+                        let min = st.random_min_sec.max(5);
+                        let max = st.random_max_sec.max(min + 1);
+                        let mut rng = LegacyRandom::new(now);
+                        let extra = rng.next_int_bound((max - min) + 1).unwrap_or(0);
+                        i64::from(min + extra) * 20
+                    } else {
+                        i64::from(st.fixed_interval_sec.max(5)) * 20
+                    };
+                });
+                if with_state(|st| st.logs) {
+                    log::info!("[RZero] Initial checkpoint created on player join.");
+                }
             }
             return;
         }
@@ -1583,8 +1584,7 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
                 .as_ref()
                 .is_some_and(|h| h.hub.guests.iter().any(|g| is_guest_safe(game, g)));
             if safe {
-                create_checkpoint_on_server(game, None);
-                if with_state(|st| st.logs) {
+                if create_checkpoint_on_server(game, None) && with_state(|st| st.logs) {
                     log::info!("[RZero] Boss defeat checkpoint created.");
                 }
                 return;
@@ -1624,8 +1624,7 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
             }
             count > 0
         });
-        if all_anchors_safe {
-            create_checkpoint_on_server(game, None);
+        if all_anchors_safe && create_checkpoint_on_server(game, None) {
             with_state_mut(|st| {
                 st.current_interval_ticks = if st.use_random_interval {
                     let min = st.random_min_sec.max(5);
@@ -1720,11 +1719,8 @@ pub fn tick_autosave_on_server(game: &mut Game<'_>) {
         trigger && since_last > min_gap
     });
 
-    if should_save {
-        create_checkpoint_on_server(game, None);
-        if with_state(|st| st.logs) {
-            log::info!("[RZero] Adaptive checkpoint created.");
-        }
+    if should_save && create_checkpoint_on_server(game, None) && with_state(|st| st.logs) {
+        log::info!("[RZero] Adaptive checkpoint created.");
     }
 }
 
@@ -1747,29 +1743,35 @@ pub fn capture_chunk_ticks(
     out
 }
 
-pub fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
+pub fn try_backup_offline_files(world_root: &Path) -> std::io::Result<HashMap<PathBuf, Vec<u8>>> {
     let mut map = HashMap::new();
-    fn walk_dir(dir: &Path, map: &mut HashMap<PathBuf, Vec<u8>>) {
-        if let Ok(entries) = fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.is_dir() {
-                    walk_dir(&p, map);
-                } else if p.is_file() {
-                    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    if ext == "dat" || ext == "json" {
-                        if let Ok(bytes) = fs::read(&p) {
-                            map.insert(p, bytes);
-                        }
-                    }
+    fn walk_dir(dir: &Path, map: &mut HashMap<PathBuf, Vec<u8>>) -> std::io::Result<()> {
+        if !dir.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let p = entry.path();
+            if p.is_dir() {
+                walk_dir(&p, map)?;
+            } else if p.is_file() {
+                let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if ext == "dat" || ext == "json" {
+                    let bytes = fs::read(&p)?;
+                    map.insert(p, bytes);
                 }
             }
         }
+        Ok(())
     }
-    walk_dir(&world_root.join("data"), &mut map);
-    walk_dir(&world_root.join("dimensions"), &mut map);
-    walk_dir(&world_root.join("players"), &mut map);
-    map
+    walk_dir(&world_root.join("data"), &mut map)?;
+    walk_dir(&world_root.join("dimensions"), &mut map)?;
+    walk_dir(&world_root.join("players"), &mut map)?;
+    Ok(map)
+}
+
+pub fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
+    try_backup_offline_files(world_root).unwrap_or_default()
 }
 
 pub fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
@@ -1854,20 +1856,27 @@ pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::Parked) -
     }
 }
 
-pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>) {
-    create_slot_checkpoint_on_server(game, requester, "default");
+pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>) -> bool {
+    create_slot_checkpoint_on_server(game, requester, "default")
 }
 
-pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>, slot: &str) {
+pub fn create_slot_checkpoint_on_server(
+    game: &mut Game<'_>,
+    requester: Option<u128>,
+    slot: &str,
+) -> bool {
+    if !is_valid_slot_name(slot.trim()) {
+        return false;
+    }
     let now = game.world.game_time;
     bench_begin(&format!("CHECKPOINT CAPTURE [{}]", slot), now);
 
     let t_raids = std::time::Instant::now();
-    let _ = game.save_game_with(true);
-    let _ = game.save_entities(true);
-    let _ = game.save.flush();
+    game.save_game_with(true);
+    game.save_entities(true);
+    game.save.flush();
     for parked in game.levels.parked.values() {
-        let _ = parked.save.flush();
+        parked.save.flush();
     }
     game.save_raids();
     game.save_fight();
@@ -2003,22 +2012,19 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     bench_accum(Phase::CaptureChunks, t_chunks);
 
     let t_globals = std::time::Instant::now();
-    let (anchor_set, policy) = with_state_mut(|st| {
+    let (anchor_set, policy) = with_state(|st| {
         let anchors: HashSet<u128> = resolve_anchors(&st.anchor, &online, now, requester)
             .into_iter()
             .collect();
-        st.anchor_ids = anchors.clone();
-        st.has_checkpoint = true;
-        st.last_save_tick = now;
-        st.current_intensity = 0.0;
-        st.peak_intensity = 0.0;
-        st.relax_ticks = 0;
         (anchors, st.policy)
     });
 
     let dragon_fight_dat = fs::read(fight_dat_path(&game.world_root)).ok();
     let trader_dat = fs::read(trader_dat_path(&game.world_root)).ok();
-    let offline_player_data = backup_offline_files(&game.world_root);
+    let Ok(offline_player_data) = try_backup_offline_files(&game.world_root) else {
+        let _ = bench_end_and_log();
+        return false;
+    };
 
     let mut region_files = HashSet::new();
     let subfolders = ["region", "entities", "poi"];
@@ -2030,19 +2036,28 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     for dim_path in dims {
         for sub in subfolders {
             let rdir = game.world_root.join(dim_path).join(sub);
-            if let Ok(entries) = fs::read_dir(rdir) {
-                for e in entries.flatten() {
-                    let p = e.path();
-                    if p.is_file() {
-                        region_files.insert(p);
-                    }
+            if !rdir.exists() {
+                continue;
+            }
+            let Ok(entries) = fs::read_dir(rdir) else {
+                let _ = bench_end_and_log();
+                return false;
+            };
+            for entry in entries {
+                let Ok(e) = entry else {
+                    let _ = bench_end_and_log();
+                    return false;
+                };
+                let p = e.path();
+                if p.is_file() {
+                    region_files.insert(p);
                 }
             }
         }
     }
 
     let timeline = Arc::new(TimelineSnapshot {
-        anchor_ids: anchor_set,
+        anchor_ids: anchor_set.clone(),
         policy,
         game_time: game.world.game_time,
         day_time: game.world.day_time,
@@ -2076,7 +2091,20 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     bench_accum(Phase::CaptureGlobals, t_globals);
 
     let t_world_state = std::time::Instant::now();
-    save_slot_to_disk(&game.world_root, slot, &timeline);
+    if !save_slot_to_disk(&game.world_root, slot, &timeline) {
+        let _ = bench_end_and_log();
+        return false;
+    }
+
+    with_state_mut(|st| {
+        st.anchor_ids = anchor_set;
+        st.has_checkpoint = true;
+        st.last_save_tick = now;
+        st.current_intensity = 0.0;
+        st.peak_intensity = 0.0;
+        st.relax_ticks = 0;
+    });
+
     set_slot_snapshot(slot, timeline);
 
     let client_snap = ClientBlockSnapshot {
@@ -2093,6 +2121,7 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);
+    true
 }
 
 // ============================================================================
@@ -3370,127 +3399,192 @@ pub fn collect_files_recursive(
     }
 }
 
-pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot) -> bool {
-    if !is_valid_slot_name(slot.trim()) {
-        return false;
-    }
-    let cp_dir = slot_dir(world_root, slot);
-    if fs::create_dir_all(&cp_dir).is_err() {
-        return false;
-    }
-
-    // 1. Копируем level.dat
-    let level_dat = world_root.join("level.dat");
-    if level_dat.is_file() {
-        let target_level = cp_dir.join("level.dat");
-        if fs::copy(&level_dat, &target_level).is_ok() {
-            if let (Ok(m), Ok(f)) = (
-                level_dat.metadata(),
-                fs::File::options().write(true).open(&target_level),
-            ) {
-                if let Ok(mtime) = m.modified() {
-                    let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
-                }
-            }
+pub fn try_copy_file_preserve_mtime(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::copy(src, dst)?;
+    if let (Ok(m), Ok(f)) = (src.metadata(), fs::File::options().write(true).open(dst)) {
+        if let Ok(mtime) = m.modified() {
+            let _ = f.set_times(std::fs::FileTimes::new().set_modified(mtime));
         }
     }
+    Ok(())
+}
 
-    // 2. Копируем папку players
-    let players_dir = world_root.join("players");
-    let cp_players = cp_dir.join("players");
-    copy_dir_recursive(&players_dir, &cp_players);
+pub fn try_copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
+    if !src.exists() {
+        return Ok(0);
+    }
+    let mut copied = 0;
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let p = entry.path();
+        let target = dst.join(entry.file_name());
+        if p.is_dir() {
+            copied += try_copy_dir_recursive(&p, &target)?;
+        } else if p.is_file() {
+            try_copy_file_preserve_mtime(&p, &target)?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
 
-    // 3. Копируем папку data
-    let data_dir = world_root.join("data");
-    let cp_data = cp_dir.join("data");
-    copy_dir_recursive(&data_dir, &cp_data);
-
-    // 3.5. Копируем файлы измерений и регионов
-    let dims_dir = world_root.join("dimensions");
-    let cp_dims = cp_dir.join("dimensions");
-    copy_dir_recursive(&dims_dir, &cp_dims);
-
-    // 4. Сохраняем метаданные гостей и чекпоинта
-    let mut guests_json = Vec::new();
-    for g in snap.guests.values() {
-        guests_json.push(serde_json::json!({
-            "uuid": format!("{:032x}", g.uuid),
-            "dimension": g.dimension,
-            "position": g.position,
-            "velocity": [g.velocity.x, g.velocity.y, g.velocity.z],
-            "yaw": g.yaw,
-            "pitch": g.pitch,
-            "head_yaw": g.head_yaw,
-            "on_ground": g.on_ground,
-            "game_mode": g.game_mode,
-            "flying": g.flying,
-            "sprinting": g.sprinting,
-            "sneaking": g.sneaking,
-            "fall_flying": g.fall_flying,
-            "boarding_cooldown": g.boarding_cooldown,
-            "health": g.health,
-            "absorption": g.absorption,
-            "food": g.food,
-            "saturation": g.saturation,
-            "exhaustion": g.exhaustion,
-            "fire_ticks": g.fire_ticks,
-            "air": g.air,
-            "ticks_frozen": g.ticks_frozen,
-            "fall_distance": g.fall_distance,
-            "xp_level": g.xp_level,
-            "xp_progress": g.xp_progress,
-            "xp_total": g.xp_total,
-            "xp_seed": g.xp_seed,
-            "selected": g.selected,
-            "seen_credits": g.seen_credits,
-        }));
+pub fn save_slot_to_disk(world_root: &Path, slot: &str, snap: &TimelineSnapshot) -> bool {
+    let clean = slot.trim();
+    if !is_valid_slot_name(clean) {
+        return false;
+    }
+    let cp_dir = slot_dir(world_root, clean);
+    let Some(parent_dir) = cp_dir.parent() else {
+        return false;
+    };
+    if fs::create_dir_all(parent_dir).is_err() {
+        return false;
     }
 
-    let regions_list: Vec<String> = snap
-        .region_files
-        .iter()
-        .filter_map(|p| {
-            p.strip_prefix(world_root)
-                .ok()
-                .map(|rel| rel.to_string_lossy().to_string())
-        })
-        .collect();
+    let tag_name = if clean == "default" {
+        "checkpoint"
+    } else {
+        clean
+    };
+    let staging_dir = parent_dir.join(format!(".{tag_name}.staging"));
+    let backup_dir = parent_dir.join(format!(".{tag_name}.bak"));
 
-    let anchors_list: Vec<String> = snap
-        .anchor_ids
-        .iter()
-        .map(|u| format!("{:032x}", u))
-        .collect();
-
-    let mut loaded_chunks_json = serde_json::Map::new();
-    for (&dim, lsnap) in &snap.levels {
-        let mut coords: Vec<[i32; 2]> = lsnap.chunks.keys().map(|&(cx, cz)| [cx, cz]).collect();
-        coords.sort_unstable();
-        loaded_chunks_json.insert(dim.id().to_owned(), serde_json::json!(coords));
+    if staging_dir.exists() && fs::remove_dir_all(&staging_dir).is_err() {
+        return false;
     }
 
-    let meta = serde_json::json!({
-        "slot": slot,
-        "saved_at_unix": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
-        "game_time": snap.game_time,
-        "day_time": snap.day_time,
-        "difficulty": snap.difficulty,
-        "difficulty_locked": snap.difficulty_locked,
-        "clock_rate": snap.clock_rate,
-        "clock_frozen": snap.clock_frozen,
-        "time_rate": snap.time_rate,
-        "world_spawn": snap.world_spawn,
-        "world_spawn_angle": snap.world_spawn_angle,
-        "next_entity": snap.next_entity,
-        "policy": snap.policy.to_json(),
-        "anchor_ids": anchors_list,
-        "region_files": regions_list,
-        "loaded_chunks": loaded_chunks_json,
-        "guests": guests_json,
-    });
+    let write_stage = (|| -> std::io::Result<()> {
+        fs::create_dir_all(&staging_dir)?;
 
-    if let Ok(json_str) = serde_json::to_string_pretty(&meta) {
-        let _ = fs::write(cp_dir.join("meta.json"), json_str);
+        let level_dat = world_root.join("level.dat");
+        if !level_dat.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "level.dat missing",
+            ));
+        }
+        try_copy_file_preserve_mtime(&level_dat, &staging_dir.join("level.dat"))?;
+
+        try_copy_dir_recursive(&world_root.join("players"), &staging_dir.join("players"))?;
+        try_copy_dir_recursive(&world_root.join("data"), &staging_dir.join("data"))?;
+        try_copy_dir_recursive(
+            &world_root.join("dimensions"),
+            &staging_dir.join("dimensions"),
+        )?;
+
+        let mut guests_json = Vec::new();
+        for g in snap.guests.values() {
+            guests_json.push(serde_json::json!({
+                "uuid": format!("{:032x}", g.uuid),
+                "dimension": g.dimension,
+                "position": g.position,
+                "velocity": [g.velocity.x, g.velocity.y, g.velocity.z],
+                "yaw": g.yaw,
+                "pitch": g.pitch,
+                "head_yaw": g.head_yaw,
+                "on_ground": g.on_ground,
+                "game_mode": g.game_mode,
+                "flying": g.flying,
+                "sprinting": g.sprinting,
+                "sneaking": g.sneaking,
+                "fall_flying": g.fall_flying,
+                "boarding_cooldown": g.boarding_cooldown,
+                "health": g.health,
+                "absorption": g.absorption,
+                "food": g.food,
+                "saturation": g.saturation,
+                "exhaustion": g.exhaustion,
+                "fire_ticks": g.fire_ticks,
+                "air": g.air,
+                "ticks_frozen": g.ticks_frozen,
+                "fall_distance": g.fall_distance,
+                "xp_level": g.xp_level,
+                "xp_progress": g.xp_progress,
+                "xp_total": g.xp_total,
+                "xp_seed": g.xp_seed,
+                "selected": g.selected,
+                "seen_credits": g.seen_credits,
+            }));
+        }
+
+        let regions_list: Vec<String> = snap
+            .region_files
+            .iter()
+            .filter_map(|p| {
+                p.strip_prefix(world_root)
+                    .ok()
+                    .map(|rel| rel.to_string_lossy().to_string())
+            })
+            .collect();
+
+        let anchors_list: Vec<String> = snap
+            .anchor_ids
+            .iter()
+            .map(|u| format!("{:032x}", u))
+            .collect();
+
+        let mut loaded_chunks_json = serde_json::Map::new();
+        for (&dim, lsnap) in &snap.levels {
+            let mut coords: Vec<[i32; 2]> =
+                lsnap.chunks.keys().map(|&(cx, cz)| [cx, cz]).collect();
+            coords.sort_unstable();
+            loaded_chunks_json.insert(dim.id().to_owned(), serde_json::json!(coords));
+        }
+
+        let meta = serde_json::json!({
+            "slot": clean,
+            "saved_at_unix": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+            "game_time": snap.game_time,
+            "day_time": snap.day_time,
+            "difficulty": snap.difficulty,
+            "difficulty_locked": snap.difficulty_locked,
+            "clock_rate": snap.clock_rate,
+            "clock_frozen": snap.clock_frozen,
+            "time_rate": snap.time_rate,
+            "world_spawn": snap.world_spawn,
+            "world_spawn_angle": snap.world_spawn_angle,
+            "next_entity": snap.next_entity,
+            "policy": snap.policy.to_json(),
+            "anchor_ids": anchors_list,
+            "region_files": regions_list,
+            "loaded_chunks": loaded_chunks_json,
+            "guests": guests_json,
+        });
+
+        let json_str = serde_json::to_string_pretty(&meta).map_err(std::io::Error::other)?;
+        let mut meta_file = fs::File::create(staging_dir.join("meta.json"))?;
+        meta_file.write_all(json_str.as_bytes())?;
+        meta_file.sync_all()?;
+        Ok(())
+    })();
+
+    if write_stage.is_err() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    if backup_dir.exists() && fs::remove_dir_all(&backup_dir).is_err() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    let had_existing = cp_dir.exists();
+    if had_existing && fs::rename(&cp_dir, &backup_dir).is_err() {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    if fs::rename(&staging_dir, &cp_dir).is_err() {
+        if had_existing {
+            let _ = fs::rename(&backup_dir, &cp_dir);
+        }
+        let _ = fs::remove_dir_all(&staging_dir);
+        return false;
+    }
+
+    if had_existing {
+        let _ = fs::remove_dir_all(&backup_dir);
     }
 
     true
@@ -4188,10 +4282,11 @@ pub fn execute_rzero_command(
             let slot = words.get(2).copied().unwrap_or("default");
             if !is_valid_slot_name(slot) {
                 "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
-            } else {
-                create_slot_checkpoint_on_server(game, requester, slot);
+            } else if create_slot_checkpoint_on_server(game, requester, slot) {
                 with_state_mut(|st| st.current_slot = slot.to_owned());
                 tr_args("command.rzero.set.slot_success", &[slot])
+            } else {
+                tr_args("command.rzero.set.slot_failed", &[slot])
             }
         }
         "load" | "rollback" => {
@@ -4317,10 +4412,11 @@ pub fn handle_slot_subcommand(
             let name = args.get(1).copied().unwrap_or("default");
             if !is_valid_slot_name(name) {
                 "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
-            } else {
-                create_slot_checkpoint_on_server(game, requester, name);
+            } else if create_slot_checkpoint_on_server(game, requester, name) {
                 with_state_mut(|st| st.current_slot = name.to_owned());
                 format!("[RZero] Saved timeline to slot '{}'.", name)
+            } else {
+                tr_args("command.rzero.set.slot_failed", &[name])
             }
         }
         "load" => {
@@ -4468,9 +4564,10 @@ pub fn handle_trigger_subcommand(
             let slot = args.get(1).copied().unwrap_or("default");
             if !is_valid_slot_name(slot) {
                 "[RZero] Invalid slot name: use 1-32 characters of [A-Za-z0-9_-].".to_owned()
-            } else {
-                create_slot_checkpoint_on_server(game, requester, slot);
+            } else if create_slot_checkpoint_on_server(game, requester, slot) {
                 format!("[RZero] Triggered checkpoint creation for slot '{}'.", slot)
+            } else {
+                tr_args("command.rzero.set.slot_failed", &[slot])
             }
         }
         _ => "[RZero] Usage: /rzero trigger <rewind|checkpoint> [slot]".to_owned(),
@@ -5424,8 +5521,11 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
                 if !has_cheat_permission(srv, None) {
                     return tr("command.rzero.no_permission");
                 }
-                create_checkpoint_on_server(srv, None);
-                tr("command.rzero.set.success")
+                if create_checkpoint_on_server(srv, None) {
+                    tr("command.rzero.set.success")
+                } else {
+                    tr("command.rzero.set.failed")
+                }
             });
             if let Some(text) = msg {
                 game.native_chat(&text);

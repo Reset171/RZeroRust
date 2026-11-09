@@ -731,7 +731,15 @@ impl CheckpointData {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let bytes = self.save_to_bytes()?;
-        fs::write(&path, bytes).map_err(|e| e.to_string())
+        let staging = path.with_extension("json.staging");
+        fs::write(&staging, bytes).map_err(|e| {
+            let _ = fs::remove_file(&staging);
+            e.to_string()
+        })?;
+        fs::rename(&staging, &path).map_err(|e| {
+            let _ = fs::remove_file(&staging);
+            e.to_string()
+        })
     }
 
     pub fn load_from_disk(world_root: &Path, dim: &str) -> Option<Self> {

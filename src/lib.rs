@@ -180,4 +180,36 @@ mod tests {
         assert!(mixin::on_guest_die_head(player, 120, 120));
         assert!(CheckpointManager::restore_checkpoint(Some(player), 120));
     }
+
+    #[test]
+    fn checkpoint_save_io_failure_preserves_known_good_checkpoint() {
+        use crate::checkpoint::data::CheckpointData;
+        use std::fs;
+
+        let tmp = std::env::temp_dir().join(format!("rzero_io_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+
+        let good = CheckpointData {
+            anchor_id: Some(42),
+            ..Default::default()
+        };
+        assert!(good.save_to_disk(&tmp, "minecraft:overworld").is_ok());
+
+        let staging_blocker = CheckpointData::data_file_path(&tmp, "minecraft:overworld")
+            .with_extension("json.staging");
+        fs::create_dir_all(staging_blocker.join("nested")).unwrap();
+
+        let bad = CheckpointData {
+            anchor_id: Some(999),
+            ..Default::default()
+        };
+        assert!(bad.save_to_disk(&tmp, "minecraft:overworld").is_err());
+
+        let loaded = CheckpointData::load_from_disk(&tmp, "minecraft:overworld")
+            .expect("known-good checkpoint must remain intact");
+        assert_eq!(loaded.anchor_id, Some(42));
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
 }

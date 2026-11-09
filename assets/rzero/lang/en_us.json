@@ -196,5 +196,7 @@
   "command.rzero.load.slot_failed": "[RZero] Rollback aborted: No timeline origin found for slot '%s'.",
   "command.rzero.f3.status": "[RZero] F3 loop hitboxes: %s",
   "ui.rzero.dev_mode": "Developer Mode: %s",
-  "command.rzero.dev.status": "[RZero] Developer Mode: %s"
+  "command.rzero.dev.status": "[RZero] Developer Mode: %s",
+  "command.rzero.set.failed": "[RZero] Failed to create checkpoint (I/O error).",
+  "command.rzero.set.slot_failed": "[RZero] Failed to save checkpoint to slot '%s' (I/O error)."
 }

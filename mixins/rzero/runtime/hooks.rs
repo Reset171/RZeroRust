@@ -27,8 +27,11 @@ pub fn handle_key(game: &mut Game<'_>, key: &str, pressed: bool) {
                 if !has_cheat_permission(srv, None) {
                     return tr("command.rzero.no_permission");
                 }
-                create_checkpoint_on_server(srv, None);
-                tr("command.rzero.set.success")
+                if create_checkpoint_on_server(srv, None) {
+                    tr("command.rzero.set.success")
+                } else {
+                    tr("command.rzero.set.failed")
+                }
             });
             if let Some(text) = msg {
                 game.native_chat(&text);

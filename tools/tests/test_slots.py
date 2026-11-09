@@ -36,7 +36,9 @@ def test_11_slots_branching(h):
     pos_b = h.state()["player"]["position"]
     assert abs(pos_b[0] - 0.5) < 1.5 and abs(pos_b[2] - 0.5) < 1.5, f"Did not rewind to beta: {pos_b}"
 
-    # 6. Очистка слотов
+    invalid_res = h.rzero("slot save ../bad")
+    assert "Invalid slot name" in str(invalid_res), f"Invalid slot name was not rejected: {invalid_res}"
+
     h.rzero("slot delete slot_alpha")
     h.rzero("slot delete slot_beta")
 

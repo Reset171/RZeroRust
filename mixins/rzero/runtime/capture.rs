@@ -37,29 +37,35 @@ pub fn capture_chunk_ticks(
     out
 }
 
-pub fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
+pub fn try_backup_offline_files(world_root: &Path) -> std::io::Result<HashMap<PathBuf, Vec<u8>>> {
     let mut map = HashMap::new();
-    fn walk_dir(dir: &Path, map: &mut HashMap<PathBuf, Vec<u8>>) {
-        if let Ok(entries) = fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.is_dir() {
-                    walk_dir(&p, map);
-                } else if p.is_file() {
-                    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    if ext == "dat" || ext == "json" {
-                        if let Ok(bytes) = fs::read(&p) {
-                            map.insert(p, bytes);
-                        }
-                    }
+    fn walk_dir(dir: &Path, map: &mut HashMap<PathBuf, Vec<u8>>) -> std::io::Result<()> {
+        if !dir.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let p = entry.path();
+            if p.is_dir() {
+                walk_dir(&p, map)?;
+            } else if p.is_file() {
+                let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if ext == "dat" || ext == "json" {
+                    let bytes = fs::read(&p)?;
+                    map.insert(p, bytes);
                 }
             }
         }
+        Ok(())
     }
-    walk_dir(&world_root.join("data"), &mut map);
-    walk_dir(&world_root.join("dimensions"), &mut map);
-    walk_dir(&world_root.join("players"), &mut map);
-    map
+    walk_dir(&world_root.join("data"), &mut map)?;
+    walk_dir(&world_root.join("dimensions"), &mut map)?;
+    walk_dir(&world_root.join("players"), &mut map)?;
+    Ok(map)
+}
+
+pub fn backup_offline_files(world_root: &Path) -> HashMap<PathBuf, Vec<u8>> {
+    try_backup_offline_files(world_root).unwrap_or_default()
 }
 
 pub fn capture_level_snapshot(game: &Game<'_>, dim: Dim) -> LevelSnapshot {
@@ -144,20 +150,27 @@ pub fn capture_parked_snapshot(world_root: &Path, dim: Dim, p: &super::Parked) -
     }
 }
 
-pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>) {
-    create_slot_checkpoint_on_server(game, requester, "default");
+pub fn create_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>) -> bool {
+    create_slot_checkpoint_on_server(game, requester, "default")
 }
 
-pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u128>, slot: &str) {
+pub fn create_slot_checkpoint_on_server(
+    game: &mut Game<'_>,
+    requester: Option<u128>,
+    slot: &str,
+) -> bool {
+    if !is_valid_slot_name(slot.trim()) {
+        return false;
+    }
     let now = game.world.game_time;
     bench_begin(&format!("CHECKPOINT CAPTURE [{}]", slot), now);
 
     let t_raids = std::time::Instant::now();
-    let _ = game.save_game_with(true);
-    let _ = game.save_entities(true);
-    let _ = game.save.flush();
+    game.save_game_with(true);
+    game.save_entities(true);
+    game.save.flush();
     for parked in game.levels.parked.values() {
-        let _ = parked.save.flush();
+        parked.save.flush();
     }
     game.save_raids();
     game.save_fight();
@@ -293,22 +306,19 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     bench_accum(Phase::CaptureChunks, t_chunks);
 
     let t_globals = std::time::Instant::now();
-    let (anchor_set, policy) = with_state_mut(|st| {
+    let (anchor_set, policy) = with_state(|st| {
         let anchors: HashSet<u128> = resolve_anchors(&st.anchor, &online, now, requester)
             .into_iter()
             .collect();
-        st.anchor_ids = anchors.clone();
-        st.has_checkpoint = true;
-        st.last_save_tick = now;
-        st.current_intensity = 0.0;
-        st.peak_intensity = 0.0;
-        st.relax_ticks = 0;
         (anchors, st.policy)
     });
 
     let dragon_fight_dat = fs::read(fight_dat_path(&game.world_root)).ok();
     let trader_dat = fs::read(trader_dat_path(&game.world_root)).ok();
-    let offline_player_data = backup_offline_files(&game.world_root);
+    let Ok(offline_player_data) = try_backup_offline_files(&game.world_root) else {
+        let _ = bench_end_and_log();
+        return false;
+    };
 
     let mut region_files = HashSet::new();
     let subfolders = ["region", "entities", "poi"];
@@ -320,19 +330,28 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     for dim_path in dims {
         for sub in subfolders {
             let rdir = game.world_root.join(dim_path).join(sub);
-            if let Ok(entries) = fs::read_dir(rdir) {
-                for e in entries.flatten() {
-                    let p = e.path();
-                    if p.is_file() {
-                        region_files.insert(p);
-                    }
+            if !rdir.exists() {
+                continue;
+            }
+            let Ok(entries) = fs::read_dir(rdir) else {
+                let _ = bench_end_and_log();
+                return false;
+            };
+            for entry in entries {
+                let Ok(e) = entry else {
+                    let _ = bench_end_and_log();
+                    return false;
+                };
+                let p = e.path();
+                if p.is_file() {
+                    region_files.insert(p);
                 }
             }
         }
     }
 
     let timeline = Arc::new(TimelineSnapshot {
-        anchor_ids: anchor_set,
+        anchor_ids: anchor_set.clone(),
         policy,
         game_time: game.world.game_time,
         day_time: game.world.day_time,
@@ -366,7 +385,20 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     bench_accum(Phase::CaptureGlobals, t_globals);
 
     let t_world_state = std::time::Instant::now();
-    save_slot_to_disk(&game.world_root, slot, &timeline);
+    if !save_slot_to_disk(&game.world_root, slot, &timeline) {
+        let _ = bench_end_and_log();
+        return false;
+    }
+
+    with_state_mut(|st| {
+        st.anchor_ids = anchor_set;
+        st.has_checkpoint = true;
+        st.last_save_tick = now;
+        st.current_intensity = 0.0;
+        st.peak_intensity = 0.0;
+        st.relax_ticks = 0;
+    });
+
     set_slot_snapshot(slot, timeline);
 
     let client_snap = ClientBlockSnapshot {
@@ -383,4 +415,5 @@ pub fn create_slot_checkpoint_on_server(game: &mut Game<'_>, requester: Option<u
     let bench_report = bench_end_and_log();
     log::info!("{}", bench_report);
     append_to_rzero_log(&game.world_root, &bench_report);
+    true
 }
